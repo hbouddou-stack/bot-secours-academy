@@ -1015,11 +1015,22 @@ async def generate_questions_ia(request):
                 course_name = lesson_obj.get('title', '')
                 blocks = lesson_obj.get('thematic_blocks', [])
                 all_course_subthemes = [b.get('title', '') for b in blocks if b.get('title')]
-                if blocks and chapter_idx is not None and 0 <= int(chapter_idx) < len(blocks):
-                    block = blocks[int(chapter_idx)]
-                    chapter_content = block.get('explanation') or block.get('search_text') or ""
-                    if not theme:
-                        theme = block.get('title', '')
+                if blocks:
+                    if chapter_idx is not None and 0 <= int(chapter_idx) < len(blocks):
+                        block = blocks[int(chapter_idx)]
+                        chapter_content = block.get('explanation') or block.get('search_text') or ""
+                        if not theme:
+                            theme = block.get('title', '')
+                    else:
+                        # User selected "All lesson", concatenate all blocks
+                        content_parts = []
+                        for b in blocks:
+                            text = b.get('explanation') or b.get('search_text') or ""
+                            if text:
+                                content_parts.append(f"--- {b.get('title', 'محور')} ---\n{text}")
+                        chapter_content = "\n\n".join(content_parts)
+                        if not theme:
+                            theme = "الدرس كاملاً"
 
         # Construct specialized prompts based on subject
         subj_clean = subject.lower().strip()
