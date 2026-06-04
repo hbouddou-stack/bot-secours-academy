@@ -60,6 +60,9 @@ async def init_db():
                 theme TEXT
             );
         """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject ON questions(subject);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_questions_course ON questions(course_number);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_questions_source ON questions(source);")
         
         # 3. user_favorites
         await db.execute("""

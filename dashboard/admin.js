@@ -975,7 +975,7 @@ window.addEventListener('unhandledrejection', function(e) {
                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                                     <td style="padding: 12px 10px; font-weight: 900; color: var(--gold); font-size: 1.1rem;">${medal}</td>
                                     <td style="padding: 12px 10px; font-weight: 700;">${s.first_name || 'طالب مجهول'} <div style="font-size: 0.75rem; color: var(--text-secondary); font-weight:normal;">@${s.username || '-'}</div></td>
-                                    <td style="padding: 12px 10px; text-align: center; font-weight: 800; color: #10b981;">${s.answer_count}</td>
+                                    <td style="padding: 12px 10px; text-align: center; font-weight: 800; color: #10b981;" data-sort-value="${Number(s.answer_count) || 0}">${s.answer_count}</td>
                                 </tr>
                                 `;
                             });
@@ -2416,7 +2416,7 @@ window.addEventListener('unhandledrejection', function(e) {
                                                     ${(item.tags || []).map(tag => `<span class="badge" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe; margin-left:4px;">${escapeHtml(tag)}</span>`).join('')}
                                                 </div>
                                             </td>
-                                            <td onclick="selectDashboardItem(${index})"><span class="cell-muted">${formatTime(item.timestamp)}</span></td>
+                                            <td onclick="selectDashboardItem(${index})" data-sort-value="${item.timestamp instanceof Date ? item.timestamp.getTime() : new Date(item.timestamp || 0).getTime()}"><span class="cell-muted">${formatTime(item.timestamp)}</span></td>
                                         </tr>
                                     `; }).join('')}
                                 </tbody>
@@ -8635,7 +8635,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
                         <td><div style="white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(q.question)}">${escapeHtml(q.question)}</div></td>
 
-                        <td><span style="font-size: 0.82rem; color: var(--text-secondary); white-space: nowrap;">${formattedDate}</span></td>
+                        <td data-sort-value="${q.created_at ? new Date(q.created_at.replace(' ', 'T')).getTime() : 0}"><span style="font-size: 0.82rem; color: var(--text-secondary); white-space: nowrap;">${formattedDate}</span></td>
 
                         <td style="text-align: center; vertical-align: middle;">${statusToggle}</td>
 
@@ -10768,13 +10768,13 @@ window.addEventListener('unhandledrejection', function(e) {
 
                         <td><span class="cell-title">${genderLabel}</span></td>
 
-                        <td><span style="font-weight: 800; color: var(--gold-light);">${s.quizCount} اختبار</span></td>
+                        <td data-sort-value="${Number(s.quizCount) || 0}"><span style="font-weight: 800; color: var(--gold-light);">${s.quizCount} اختبار</span></td>
 
-                        <td><span class="badge-count" style="background-color: ${s.reportCount > 0 ? 'var(--danger)' : 'rgba(255,255,255,0.05)'}; color: ${s.reportCount > 0 ? 'white' : 'var(--text-secondary)'}; padding: 2px 8px; border-radius: 50px;">${s.reportCount}</span></td>
+                        <td data-sort-value="${Number(s.reportCount) || 0}"><span class="badge-count" style="background-color: ${s.reportCount > 0 ? 'var(--danger)' : 'rgba(255,255,255,0.05)'}; color: ${s.reportCount > 0 ? 'white' : 'var(--text-secondary)'}; padding: 2px 8px; border-radius: 50px;">${s.reportCount}</span></td>
 
-                        <td><span class="badge-count" style="background-color: ${s.proposalCount > 0 ? 'var(--success)' : 'rgba(255,255,255,0.05)'}; color: ${s.proposalCount > 0 ? 'white' : 'var(--text-secondary)'}; padding: 2px 8px; border-radius: 50px;">${s.proposalCount}</span></td>
+                        <td data-sort-value="${Number(s.proposalCount) || 0}"><span class="badge-count" style="background-color: ${s.proposalCount > 0 ? 'var(--success)' : 'rgba(255,255,255,0.05)'}; color: ${s.proposalCount > 0 ? 'white' : 'var(--text-secondary)'}; padding: 2px 8px; border-radius: 50px;">${s.proposalCount}</span></td>
 
-                        <td><span class="cell-muted">${formatTime(s.createdAt)}</span></td>
+                        <td data-sort-value="${s.createdAt ? new Date(s.createdAt).getTime() : 0}"><span class="cell-muted">${formatTime(s.createdAt)}</span></td>
 
                     </tr>
 
