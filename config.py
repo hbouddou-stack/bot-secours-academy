@@ -26,6 +26,6 @@ BACKUP_BOT_USERNAME = "minassatalbajibot"
 ACADEMY_GROUP_ID = int(os.getenv("ACADEMY_GROUP_ID", "-1003724140001"))
 
 # Database paths
-DATABASE_PATH = os.path.join(os.path.dirname(__file__), "backup_bot.db")
+DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "backup_bot.db"))
 MAIN_DATABASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../telegram-bot/persistent_storage/academy.db"))
 MAIN_CREDENTIALS_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../telegram-bot/credentials.json"))
