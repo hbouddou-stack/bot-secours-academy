@@ -1,0 +1,1217 @@
+import time
+import random
+import logging
+import re
+import html
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, Message
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
+
+import database as db
+import keyboards as kb
+
+logger = logging.getLogger(__name__)
+router = Router(name="quiz")
+
+SUBJECT_MAP = {
+    "fiqh": "الفقه",
+    "sira": "السيرة النبوية",
+    "nahw": "النحو",
+    "aqeeda": "العقيدة"
+}
+
+ARABIC_CHARS = {"a": "أ", "b": "ب", "c": "ج", "d": "د"}
+
+DEFAULT_SETTINGS = {
+    "timer": "unlimited",
+    "correction": "immediate",
+    "order": "random",
+    "source": "all"
+}
+
+class QuizStates(StatesGroup):
+    selecting_subject = State()
+    selecting_mode = State()
+    selecting_lessons = State()
+    selecting_themes = State()
+    selecting_years = State()
+    customizing_settings = State()
+    answering = State()
+    showing_results = State()
+
+def split_text(text: str, limit: int = 3500) -> list[str]:
+    """Helper to partition a long text into chunks to avoid Telegram message length limits."""
+    chunks = []
+    while len(text) > limit:
+        split_idx = text.rfind('\n', 0, limit)
+        if split_idx == -1:
+            split_idx = limit
+        chunks.append(text[:split_idx])
+        text = text[split_idx:]
+    if text:
+        chunks.append(text)
+    return chunks
+
+async def render_subject_selection(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(QuizStates.selecting_subject)
+    data = await state.get_data()
+    is_continue = data.get("continue_mode", False)
+    
+    if is_continue:
+        remaining_counts = await db.get_remaining_questions_count_per_subject(callback.from_user.id)
+    else:
+        remaining_counts = None
+        
+    await callback.message.edit_text(
+        "📚 <b>يرجى تحديد المادة الدراسية لبدء الاختبار:</b>",
+        reply_markup=kb.get_subject_list_keyboard(remaining_counts),
+        parse_mode="HTML"
+    )
+
+async def render_mode_selection(callback: CallbackQuery, state: FSMContext, subject: str):
+    await state.set_state(QuizStates.selecting_mode)
+    subject_ar = SUBJECT_MAP.get(subject, subject)
+    if subject == "sira":
+        text = (
+            f"🎯 <b>مادة {subject_ar}</b>\n\n"
+            "يرجى اختيار طريقة تصنيف الأسئلة:\n"
+            "• حسب أرقام الدروس في المنهج الدراسي\n"
+            "• حسب السنوات الهجرية للأحداث\n"
+            "• حسب المحاور والمواضيع الرئيسية للمادة"
+        )
+    else:
+        text = (
+            f"🎯 <b>مادة {subject_ar}</b>\n\n"
+            "يرجى اختيار طريقة تصنيف الأسئلة:\n"
+            "• حسب أرقام الدروس في المنهج الدراسي\n"
+            "• حسب المحاور والمواضيع الرئيسية للمادة"
+        )
+    await callback.message.edit_text(
+        text,
+        reply_markup=kb.get_quiz_mode_selection_keyboard(subject),
+        parse_mode="HTML"
+    )
+
+async def render_lessons_grid(callback: CallbackQuery, state: FSMContext, subject: str, selected_lessons: list[int]):
+    await state.set_state(QuizStates.selecting_lessons)
+    subject_ar = SUBJECT_MAP.get(subject, subject)
+    
+    # Get available lessons from DB
+    available = await db.get_available_lessons(subject)
+            
+    if not available:
+        available = list(range(14, 25))
+        
+    await callback.message.edit_text(
+        f"📖 <b>مادة {subject_ar} - اختيار الدروس:</b>\n\n"
+        "<i>حدد الدروس التي تريد الاختبار فيها (يمكنك اختيار درس أو أكثر):</i>",
+        reply_markup=kb.get_lessons_grid_keyboard(subject, available, selected_lessons),
+        parse_mode="HTML"
+    )
+
+async def render_themes_grid(callback: CallbackQuery, state: FSMContext, subject: str, selected_themes: list[str]):
+    await state.set_state(QuizStates.selecting_themes)
+    subject_ar = SUBJECT_MAP.get(subject, subject)
+    
+    available_themes = None
+    if subject == "sira":
+        available_themes = await db.get_available_sira_themes()
+        
+    await callback.message.edit_text(
+        f"🎯 <b>مادة {subject_ar} - اختيار المحاور:</b>\n\n"
+        "<i>حدد المحاور الدراسية التي تريد الاختبار فيها:</i>",
+        reply_markup=kb.get_themes_grid_keyboard(subject, selected_themes, available_themes),
+        parse_mode="HTML"
+    )
+
+async def render_exam_settings(callback: CallbackQuery, state: FSMContext, subject: str, mode: str, selection_text: str, settings: dict):
+    await state.set_state(QuizStates.customizing_settings)
+    subject_ar = SUBJECT_MAP.get(subject, subject)
+    mode_ar = "حسب الدروس" if mode == "lessons" else "حسب المحاور"
+    
+    text = (
+        f"⚙️ <b>إعدادات الاختبار - {subject_ar} ({mode_ar})</b>\n\n"
+        f"📌 <b>المحدد:</b> {selection_text}\n\n"
+        "اضغط على الأزرار أدناه لتعديل خيارات الاختبار قبل البدء:"
+    )
+    await callback.message.edit_text(
+        text,
+        reply_markup=kb.get_exam_settings_keyboard(settings),
+        parse_mode="HTML"
+    )
+
+async def show_question(callback: CallbackQuery, state: FSMContext):
+    """Render the current question to the student."""
+    data = await state.get_data()
+    questions = data.get("questions")
+    current_index = data.get("current_index")
+    settings = data.get("settings", DEFAULT_SETTINGS)
+    
+    if current_index >= len(questions):
+        await finish_quiz(callback, state)
+        return
+        
+    q = questions[current_index]
+    
+    # Store starting time
+    await state.update_data(q_start_time=time.time())
+    
+    # Handle Choice Shuffling
+    orig_choices = [
+        ("a", q.get("choice_a")),
+        ("b", q.get("choice_b")),
+        ("c", q.get("choice_c")),
+        ("d", q.get("choice_d"))
+    ]
+    active_choices = [item for item in orig_choices if item[1] and item[1].strip()]
+    correct_choice_orig = db.get_correct_choice_letter(q)
+    
+    c_order = settings.get("order", "random")
+    if c_order == "random":
+        random.shuffle(active_choices)
+        
+    shuffled_choices = {}
+    new_correct = None
+    keys_list = ["a", "b", "c", "d"]
+    for idx, item in enumerate(active_choices):
+        new_key = keys_list[idx]
+        shuffled_choices[new_key] = item[1]
+        if item[0] == correct_choice_orig:
+            new_correct = new_key
+            
+    await state.update_data(current_correct_answer=new_correct, current_active_choices=shuffled_choices)
+    
+    # Smart choices layout check: True if any choice is longer than 25 chars
+    force_letters = any(len(v.strip()) > 25 for v in shuffled_choices.values())
+    
+    subject_ar = SUBJECT_MAP.get(q.get("subject", "").lower(), q.get("subject"))
+    progress_ratio = current_index / len(questions)
+    filled = int(progress_ratio * 10)
+    progress_bar = "🟢" * filled + "⚪" * (10 - filled)
+    
+    text = (
+        f"📝 <b>السؤال {current_index + 1} من {len(questions)}</b> | <b>الدرس {q.get('course_number')}</b> ({subject_ar})\n"
+        f"📊 {progress_bar} {int(progress_ratio * 100)}%\n\n"
+        f"{(q.get('question') or '').strip()}\n\n"
+    )
+    
+    # Choices text is always shown in message body
+    for k, v in shuffled_choices.items():
+        text += f"<blockquote><b>{ARABIC_CHARS[k]})</b> {v.strip()}</blockquote>\n"
+        
+    timer_val = settings.get("timer", "unlimited")
+    if timer_val != "unlimited":
+        sec = 30 if timer_val == "30s" else 60
+        text += f"\n⏱️ <i>لديك {sec} ثانية للإجابة!</i>"
+        
+    user_id = callback.from_user.id
+    is_fav = await db.is_favorite(user_id, q["id"])
+    reply_markup = kb.get_answer_keyboard(
+        shuffled_choices,
+        force_letters=force_letters,
+        is_fav=is_fav,
+        question_id=q["id"],
+        question_text=q.get("question")
+    )
+    
+    await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+
+# --- Setup Flow Handlers ---
+
+@router.callback_query(QuizStates.selecting_subject, F.data.startswith("sel_sub:"))
+async def handle_subject_selected(callback: CallbackQuery, state: FSMContext):
+    subject = callback.data.split(":")[1]
+    await state.update_data(subject=subject)
+    
+    data = await state.get_data()
+    preselected_lesson = data.get("preselected_lesson")
+    continue_mode = data.get("continue_mode", False)
+    
+    if continue_mode:
+        # Continue mode: load only unanswered or wrong questions
+        await callback.answer()
+        user_id = callback.from_user.id
+        questions = await db.get_not_done_questions(user_id, subject)
+        
+        if not questions:
+            await callback.message.edit_text(
+                f"🏆 <b>لا يوجد أسئلة متبقية في هذه المادة!</b>\n\n"
+                f"✅ لقد أتقنت جميع أسئلة هذه المادة.\n"
+                f"جرب مادة أخرى أو ابدأ اختباراً جديداً.",
+                parse_mode="HTML"
+            )
+            return
+        
+        # Count what we have
+        nd_count = len([q for q in questions])
+        
+        await state.update_data(
+            continue_mode=False,
+            questions=questions,
+            current_index=0,
+            answers={},
+            times={},
+            results={},
+            settings=DEFAULT_SETTINGS.copy()
+        )
+        await state.set_state(QuizStates.answering)
+        
+        await callback.message.edit_text(
+            f"▶️ <b>مواصلة المسار</b>\n\n"
+            f"سيتم اختبارك على <b>{nd_count}</b> سؤال متبقٍ في هذه المادة.\n"
+            f"استعدّ!",
+            parse_mode="HTML"
+        )
+        await show_question(callback, state)
+        return
+    
+    if preselected_lesson:
+        # Directly set mode to lessons and select it
+        await state.update_data(
+            mode="lessons",
+            selected_lessons=[preselected_lesson],
+            selected_themes=[],
+            settings=DEFAULT_SETTINGS.copy()
+        )
+        # Clear preselected lesson so subsequent flow is normal
+        await state.update_data(preselected_lesson=None)
+        
+        # Go straight to settings page
+        selection_text = f"الدرس {preselected_lesson}"
+        await render_exam_settings(callback, state, subject, "lessons", selection_text, DEFAULT_SETTINGS)
+    else:
+        # Normal flow: ask for mode (lessons vs themes)
+        await render_mode_selection(callback, state, subject)
+    await callback.answer()
+
+
+@router.callback_query(QuizStates.selecting_subject, F.data == "quiz_cancel")
+async def handle_quiz_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    user_id = callback.from_user.id
+    from handlers.start import is_admin
+    stats = await db.get_user_overall_stats(user_id)
+    remaining = stats['not_done'] + stats['wrong']
+    await callback.message.edit_text(
+        "🎓 <b>القائمة الرئيسية:</b>\n\n"
+        "اختر أحد الخيارات التالية لمتابعة المذاكرة والاختبارات:",
+        reply_markup=kb.get_main_inline_keyboard(is_admin=is_admin(user_id), remaining_count=remaining),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_mode, F.data.startswith("sel_mode:"))
+async def handle_mode_selected(callback: CallbackQuery, state: FSMContext):
+    mode = callback.data.split(":")[1]
+    await state.update_data(mode=mode)
+    
+    data = await state.get_data()
+    subject = data.get("subject")
+    
+    if mode == "lessons":
+        await state.update_data(selected_lessons=[])
+        await render_lessons_grid(callback, state, subject, [])
+    elif mode == "years":
+        await state.update_data(selected_years=[])
+        await render_years_grid(callback, state, [])
+    elif mode == "themes":
+        await state.update_data(selected_themes=[])
+        await render_themes_grid(callback, state, subject, [])
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_mode, F.data == "mode_back")
+async def handle_mode_back(callback: CallbackQuery, state: FSMContext):
+    await render_subject_selection(callback, state)
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_lessons, F.data.startswith("tog_les:"))
+async def handle_toggle_lesson(callback: CallbackQuery, state: FSMContext):
+    lesson = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    subject = data.get("subject")
+    selected = data.get("selected_lessons", [])
+    
+    if lesson in selected:
+        selected.remove(lesson)
+    else:
+        selected.append(lesson)
+        
+    await state.update_data(selected_lessons=selected)
+    await render_lessons_grid(callback, state, subject, selected)
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_lessons, F.data.startswith("les_act:"))
+async def handle_lessons_action(callback: CallbackQuery, state: FSMContext):
+    action = callback.data.split(":")[1]
+    data = await state.get_data()
+    subject = data.get("subject")
+    
+    if action == "all":
+        # Fetch all available lessons for subject from DB
+        available = await db.get_available_lessons(subject)
+        if not available:
+            available = list(range(14, 25))
+        await state.update_data(selected_lessons=available)
+        await render_lessons_grid(callback, state, subject, available)
+    elif action == "none":
+        await state.update_data(selected_lessons=[])
+        await render_lessons_grid(callback, state, subject, [])
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_lessons, F.data == "les_confirm")
+async def handle_lessons_confirm(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subject = data.get("subject")
+    selected = data.get("selected_lessons", [])
+    
+    if not selected:
+        await callback.answer("⚠️ يرجى اختيار درس واحد على الأقل للبدء!", show_alert=True)
+        return
+        
+    settings = data.get("settings", DEFAULT_SETTINGS.copy())
+    await state.update_data(settings=settings)
+    
+    sorted_selected = sorted(selected)
+    selection_text = ", ".join(f"الدرس {l}" for l in sorted_selected)
+    await render_exam_settings(callback, state, subject, "lessons", selection_text, settings)
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_lessons, F.data == "les_back")
+async def handle_lessons_back(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subject = data.get("subject")
+    await render_mode_selection(callback, state, subject)
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_themes, F.data.startswith("tog_th:"))
+async def handle_toggle_theme(callback: CallbackQuery, state: FSMContext):
+    theme = callback.data.split(":")[1]
+    data = await state.get_data()
+    subject = data.get("subject")
+    selected = data.get("selected_themes", [])
+    
+    if theme in selected:
+        selected.remove(theme)
+    else:
+        selected.append(theme)
+        
+    await state.update_data(selected_themes=selected)
+    await render_themes_grid(callback, state, subject, selected)
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_themes, F.data == "th_confirm")
+async def handle_themes_confirm(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subject = data.get("subject")
+    selected = data.get("selected_themes", [])
+    
+    if not selected:
+        await callback.answer("⚠️ يرجى اختيار محور واحد على الأقل للبدء!", show_alert=True)
+        return
+        
+    settings = data.get("settings", DEFAULT_SETTINGS.copy())
+    await state.update_data(settings=settings)
+    
+    if subject == "sira":
+        selection_text = ", ".join(selected)
+    else:
+        from keyboards import THEMES
+        theme_labels = [THEMES[subject][t]["label"] for t in selected if t in THEMES.get(subject, {})]
+        selection_text = ", ".join(theme_labels)
+        
+    await render_exam_settings(callback, state, subject, "themes", selection_text, settings)
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_themes, F.data == "th_back")
+async def handle_themes_back(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subject = data.get("subject")
+    await render_mode_selection(callback, state, subject)
+    await callback.answer()
+
+# --- Hijri Years Handlers ---
+
+async def render_years_grid(callback: CallbackQuery, state: FSMContext, selected_years: list[int]):
+    await state.set_state(QuizStates.selecting_years)
+    await callback.message.edit_text(
+        "📅 <b>السيرة النبوية - اختيار السنوات الهجرية:</b>\n\n"
+        "<i>حدد السنوات التي تريد الاختبار فيها:</i>",
+        reply_markup=kb.get_years_grid_keyboard(selected_years),
+        parse_mode="HTML"
+    )
+
+@router.callback_query(QuizStates.selecting_years, F.data.startswith("tog_yr:"))
+async def handle_toggle_year(callback: CallbackQuery, state: FSMContext):
+    year = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    selected = data.get("selected_years", [])
+    
+    if year in selected:
+        selected.remove(year)
+    else:
+        selected.append(year)
+        
+    await state.update_data(selected_years=selected)
+    await render_years_grid(callback, state, selected)
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_years, F.data.startswith("yr_act:"))
+async def handle_years_action(callback: CallbackQuery, state: FSMContext):
+    action = callback.data.split(":")[1]
+    
+    if action == "all":
+        available = list(range(1, 12))
+        await state.update_data(selected_years=available)
+        await render_years_grid(callback, state, available)
+    elif action == "none":
+        await state.update_data(selected_years=[])
+        await render_years_grid(callback, state, [])
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_years, F.data == "yr_confirm")
+async def handle_years_confirm(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subject = data.get("subject")
+    selected = data.get("selected_years", [])
+    
+    if not selected:
+        await callback.answer("⚠️ يرجى اختيار سنة واحدة على الأقل للبدء!", show_alert=True)
+        return
+        
+    settings = data.get("settings", DEFAULT_SETTINGS.copy())
+    await state.update_data(settings=settings)
+    
+    sorted_selected = sorted(selected)
+    selection_text = ", ".join(f"{y} هـ" for y in sorted_selected)
+    await render_exam_settings(callback, state, subject, "years", selection_text, settings)
+    await callback.answer()
+
+@router.callback_query(QuizStates.selecting_years, F.data == "yr_back")
+async def handle_years_back(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subject = data.get("subject")
+    await render_mode_selection(callback, state, subject)
+    await callback.answer()
+
+@router.callback_query(QuizStates.customizing_settings, F.data.startswith("set_tog:"))
+async def handle_setting_toggle(callback: CallbackQuery, state: FSMContext):
+    key = callback.data.split(":")[1]
+    data = await state.get_data()
+    subject = data.get("subject")
+    mode = data.get("mode")
+    selected_lessons = data.get("selected_lessons", [])
+    selected_themes = data.get("selected_themes", [])
+    selected_years = data.get("selected_years", [])
+    settings = data.get("settings", DEFAULT_SETTINGS.copy())
+    
+    if key == "timer":
+        cycle = ["unlimited", "30s", "60s"]
+        current = settings.get("timer", "unlimited")
+        settings["timer"] = cycle[(cycle.index(current) + 1) % len(cycle)]
+    elif key == "correction":
+        cycle = ["immediate", "end"]
+        current = settings.get("correction", "immediate")
+        settings["correction"] = cycle[(cycle.index(current) + 1) % len(cycle)]
+    elif key == "order":
+        cycle = ["random", "sequential"]
+        current = settings.get("order", "random")
+        settings["order"] = cycle[(cycle.index(current) + 1) % len(cycle)]
+    elif key == "source":
+        cycle = ["all", "errors", "favorites"]
+        current = settings.get("source", "all")
+        settings["source"] = cycle[(cycle.index(current) + 1) % len(cycle)]
+        
+    await state.update_data(settings=settings)
+    
+    if mode == "lessons":
+        selection_text = ", ".join(f"الدرس {l}" for l in sorted(selected_lessons))
+    elif mode == "years":
+        selection_text = ", ".join(f"{y} هـ" for y in sorted(selected_years))
+    else:
+        if subject == "sira":
+            selection_text = ", ".join(selected_themes)
+        else:
+            from keyboards import THEMES
+            theme_labels = [THEMES[subject][t]["label"] for t in selected_themes if t in THEMES.get(subject, {})]
+            selection_text = ", ".join(theme_labels)
+        
+    await render_exam_settings(callback, state, subject, mode, selection_text, settings)
+    await callback.answer()
+
+@router.callback_query(QuizStates.customizing_settings, F.data == "settings_back")
+async def handle_settings_back(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subject = data.get("subject")
+    mode = data.get("mode")
+    
+    if mode == "lessons":
+        selected = data.get("selected_lessons", [])
+        await render_lessons_grid(callback, state, subject, selected)
+    elif mode == "years":
+        selected = data.get("selected_years", [])
+        await render_years_grid(callback, state, selected)
+    else:
+        selected = data.get("selected_themes", [])
+        await render_themes_grid(callback, state, subject, selected)
+    await callback.answer()
+
+async def initialize_and_start_quiz(callback: CallbackQuery, state: FSMContext, data: dict):
+    subject = data.get("subject")
+    mode = data.get("mode")
+    selected_lessons = data.get("selected_lessons", [])
+    selected_themes = data.get("selected_themes", [])
+    selected_years = data.get("selected_years", [])
+    settings = data.get("settings", DEFAULT_SETTINGS.copy())
+    
+    if subject == "sira" and mode == "years":
+        questions = await db.get_questions_for_sira_years(selected_years)
+    elif subject == "sira" and mode == "themes":
+        questions = await db.get_questions_for_sira_themes(selected_themes)
+    else:
+        course_numbers = []
+        if mode == "lessons":
+            course_numbers = selected_lessons
+        else:
+            from keyboards import THEMES
+            for th_key in selected_themes:
+                th_info = THEMES.get(subject, {}).get(th_key, {})
+                course_numbers.extend(th_info.get("lessons", []))
+            course_numbers = list(set(course_numbers))
+        questions = await db.get_questions_for_subject_courses(subject, course_numbers)
+    if not questions:
+        await callback.message.answer("⚠️ عذراً، لا توجد أسئلة متوفرة للمحدد حالياً.")
+        return
+        
+    # Apply filtering based on source
+    source_val = settings.get("source", "all")
+    user_id = callback.from_user.id
+    if source_val == "errors":
+        user_errors = await db.get_user_errors(user_id)
+        questions = [q for q in questions if q["id"] in user_errors]
+        if not questions:
+            await callback.answer("⚠️ ليس لديك أي أخطاء مسجلة في هذا المحدد حالياً.", show_alert=True)
+            return
+    elif source_val == "favorites":
+        user_favs = await db.get_user_favorites(user_id)
+        questions = [q for q in questions if q["id"] in user_favs]
+        if not questions:
+            await callback.answer("⚠️ ليس لديك أي أسئلة في المفضلة لهذا المحدد حالياً.", show_alert=True)
+            return
+
+    if settings.get("order", "random") == "random":
+        random.shuffle(questions)
+        
+    questions = questions[:20]
+    
+    await state.set_state(QuizStates.answering)
+    await state.update_data(
+        questions=questions,
+        current_index=0,
+        answers={},
+        times={},
+        results={}
+    )
+    
+    await show_question(callback, state)
+
+@router.callback_query(QuizStates.customizing_settings, F.data == "settings_start")
+async def handle_settings_start(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await callback.answer("⏳ جاري تحضير الأسئلة...")
+    await initialize_and_start_quiz(callback, state, data)
+
+async def render_question_correction(callback: CallbackQuery, state: FSMContext, index: int):
+    """Render the correction screen for an already answered question."""
+    data = await state.get_data()
+    questions = data.get("questions")
+    results = data.get("results", {})
+    
+    if index < 0 or index >= len(questions):
+        return
+        
+    q = questions[index]
+    res = results.get(str(index))
+    if not res:
+        return
+        
+    is_correct = res["is_correct"]
+    choice = res["choice"]
+    correct_choice = res["correct_choice"]
+    is_timeout = res.get("is_timeout", False)
+    active_choices = res["active_choices"]
+    
+    subject_ar = SUBJECT_MAP.get(q.get("subject", "").lower(), q.get("subject"))
+    
+    # Progress bar (based on index + 1 since this question is completed)
+    progress_ratio = (index + 1) / len(questions)
+    filled = int(progress_ratio * 10)
+    progress_bar = "🟢" * filled + "⚪" * (10 - filled)
+    
+    text = (
+        f"📝 <b>السؤال {index + 1} من {len(questions)}</b> | <b>الدرس {q.get('course_number')}</b> ({subject_ar})\n"
+        f"📊 {progress_bar} {int(progress_ratio * 100)}%\n\n"
+        f"{(q.get('question') or '').strip()}\n\n"
+    )
+    
+    for k, v in active_choices.items():
+        if k == correct_choice:
+            text += f"<blockquote><b>{ARABIC_CHARS[k]}) {v.strip()}</b> (✅ الإجابة الصحيحة)</blockquote>\n"
+        elif k == choice and not is_correct:
+            text += f"<blockquote><s>{ARABIC_CHARS[k]}) {v.strip()}</s> (❌ إجابتك)</blockquote>\n"
+        else:
+            text += f"<blockquote>{ARABIC_CHARS[k]}) {v.strip()}</blockquote>\n"
+            
+    text += "\n──────────────────\n"
+    if is_timeout:
+        text += "⌛ <b>انتهى الوقت! (تجاوزت حد الوقت المسموح)</b>\n\n"
+    elif is_correct:
+        text += "✅ <b>إجابة صحيحة! أحسنت.</b>\n\n"
+    else:
+        text += f"❌ <b>إجابة خاطئة.</b>\n\n"
+        
+    user_id = callback.from_user.id
+    is_fav = await db.is_favorite(user_id, q["id"])
+    is_last = (index + 1 >= len(questions))
+    has_expl = bool(q.get("explanation"))
+    has_prev = index > 0
+    
+    # Set current index in state to the browsed index
+    await state.update_data(current_index=index)
+    
+    reply_markup = kb.get_feedback_keyboard(
+        q["id"], 
+        is_fav, 
+        is_last, 
+        has_explanation=has_expl, 
+        has_prev=has_prev
+    )
+    
+    await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+
+# --- Answering Phase Handlers ---
+
+@router.callback_query(QuizStates.answering, F.data.startswith("ans:"))
+async def handle_answer_callback(callback: CallbackQuery, state: FSMContext):
+    choice = callback.data.split(":")[1]
+    
+    data = await state.get_data()
+    questions = data.get("questions")
+    current_index = data.get("current_index")
+    settings = data.get("settings", DEFAULT_SETTINGS)
+    q_start_time = data.get("q_start_time", time.time())
+    answers = data.get("answers", {})
+    times = data.get("times", {})
+    results = data.get("results", {})
+    correct_choice = data.get("current_correct_answer")
+    active_choices = data.get("current_active_choices", {})
+    
+    if str(current_index) in answers:
+        await callback.answer("لقد أجبت على هذا السؤال بالفعل.")
+        return
+        
+    elapsed = time.time() - q_start_time
+    timer_val = settings.get("timer", "unlimited")
+    limit = 30.0 if timer_val == "30s" else (60.0 if timer_val == "60s" else None)
+    is_timeout = (limit is not None and elapsed > limit + 2.0)
+    
+    q = questions[current_index]
+    is_correct = (choice == correct_choice) and not is_timeout
+    
+    user_id = callback.from_user.id
+    
+    await db.log_quiz_answer(user_id, q["id"], is_correct)
+    # Track mastery progress
+    await db.update_question_progress(user_id, q["id"], is_correct)
+    
+    if is_correct:
+        await db.remove_error(user_id, q["id"])
+    else:
+        wrong_val = "timeout" if is_timeout else choice
+        await db.add_error(user_id, q["id"], q["subject"], wrong_val)
+
+        
+    answers[str(current_index)] = "timeout" if is_timeout else choice
+    times[str(current_index)] = elapsed
+    results[str(current_index)] = {
+        "is_correct": is_correct,
+        "choice": choice,
+        "correct_choice": correct_choice,
+        "elapsed": elapsed,
+        "is_timeout": is_timeout,
+        "active_choices": active_choices
+    }
+    
+    await state.update_data(answers=answers, times=times, results=results)
+    
+    correction_val = settings.get("correction", "immediate")
+    if correction_val == "immediate":
+        await callback.answer()
+        await render_question_correction(callback, state, current_index)
+    else:
+        if is_timeout:
+            await callback.answer("⌛ انتهى الوقت!", show_alert=True)
+        else:
+            await callback.answer()
+            
+        next_idx = current_index + 1
+        if next_idx < len(questions):
+            await state.update_data(current_index=next_idx)
+            await show_question(callback, state)
+        else:
+            await finish_quiz(callback, state)
+
+@router.callback_query(QuizStates.answering, F.data.startswith("fav_add:"))
+async def handle_fav_add(callback: CallbackQuery, state: FSMContext):
+    q_id = int(callback.data.split(":")[1])
+    q = await db.get_question_by_id(q_id)
+    if q:
+        await db.add_favorite(callback.from_user.id, q_id, q["subject"])
+        await callback.answer("⭐ تمت الإضافة للمفضلة")
+        data = await state.get_data()
+        current_index = data.get("current_index", 0)
+        has_prev = current_index > 0
+        is_last = any(btn.callback_data == "quiz_finish" for btn in callback.message.reply_markup.inline_keyboard[0])
+        has_expl = bool(q.get("explanation"))
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.get_feedback_keyboard(q_id, is_fav=True, is_last=is_last, has_explanation=has_expl, has_prev=has_prev)
+        )
+
+@router.callback_query(QuizStates.answering, F.data.startswith("fav_rem:"))
+async def handle_fav_rem(callback: CallbackQuery, state: FSMContext):
+    q_id = int(callback.data.split(":")[1])
+    await db.remove_favorite(callback.from_user.id, q_id)
+    await callback.answer("🗑️ تم الحذف من المفضلة")
+    data = await state.get_data()
+    current_index = data.get("current_index", 0)
+    has_prev = current_index > 0
+    is_last = any(btn.callback_data == "quiz_finish" for btn in callback.message.reply_markup.inline_keyboard[0])
+    q = await db.get_question_by_id(q_id)
+    has_expl = bool(q.get("explanation")) if q else False
+    await callback.message.edit_reply_markup(
+        reply_markup=kb.get_feedback_keyboard(q_id, is_fav=False, is_last=is_last, has_explanation=has_expl, has_prev=has_prev)
+    )
+
+@router.callback_query(QuizStates.answering, F.data.startswith("fav_q_add:"))
+async def handle_fav_q_add(callback: CallbackQuery, state: FSMContext):
+    q_id = int(callback.data.split(":")[1])
+    q = await db.get_question_by_id(q_id)
+    if q:
+        await db.add_favorite(callback.from_user.id, q_id, q["subject"])
+        await callback.answer("⭐ تمت الإضافة للمفضلة")
+        
+        data = await state.get_data()
+        current_active_choices = data.get("current_active_choices", {})
+        force_letters = any(len(v.strip()) > 25 for v in current_active_choices.values())
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.get_answer_keyboard(current_active_choices, force_letters=force_letters, is_fav=True, question_id=q_id, question_text=q.get("question"))
+        )
+
+@router.callback_query(QuizStates.answering, F.data.startswith("fav_q_rem:"))
+async def handle_fav_q_rem(callback: CallbackQuery, state: FSMContext):
+    q_id = int(callback.data.split(":")[1])
+    await db.remove_favorite(callback.from_user.id, q_id)
+    await callback.answer("🗑️ تم الحذف من المفضلة")
+    
+    data = await state.get_data()
+    current_active_choices = data.get("current_active_choices", {})
+    force_letters = any(len(v.strip()) > 25 for v in current_active_choices.values())
+    
+    q = await db.get_question_by_id(q_id)
+    question_text = q.get("question") if q else None
+    await callback.message.edit_reply_markup(
+        reply_markup=kb.get_answer_keyboard(current_active_choices, force_letters=force_letters, is_fav=False, question_id=q_id, question_text=question_text)
+    )
+
+def split_explanation(explanation_text: str):
+    import re
+    text = explanation_text.strip()
+    source = ""
+    if "📍" in text:
+        parts = text.split("📍", 1)
+        text = parts[0].strip()
+        source = "📍 " + parts[1].replace("</blockquote>", "").strip()
+    elif "المصدر" in text:
+        parts = text.split("المصدر", 1)
+        text = parts[0].strip()
+        source = "📍 المصدر " + parts[1].replace("</blockquote>", "").strip()
+        
+    pedagogical = ""
+    citation = ""
+    
+    idx = -1
+    for marker in ["📖", "الشيخ ياسين العمري", "<blockquote>"]:
+        found = text.find(marker)
+        if found != -1:
+            if idx == -1 or found < idx:
+                idx = found
+                
+    if idx != -1:
+        pedagogical = text[:idx].strip()
+        citation = text[idx:].strip()
+    else:
+        pedagogical = text
+        citation = ""
+        
+    pedagogical = re.sub(r'^(💡|💡 |<b>التفسير التربوي</b>|التفسير التربوي|:| :)+', '', pedagogical).strip()
+    pedagogical = re.sub(r'^[:\s\r\n\u200f]+', '', pedagogical).strip()
+    pedagogical = pedagogical.replace("<blockquote>", "").replace("</blockquote>", "").strip()
+    
+    citation = re.sub(r'^(📖|📖 |<b>الشيخ ياسين العمري يقول :</b>|الشيخ ياسين العمري يقول :|:| :)+', '', citation).strip()
+    citation = re.sub(r'^[:\s\r\n\u200f]+', '', citation).strip()
+    citation = citation.replace("<blockquote>", "").replace("</blockquote>", "").strip()
+    
+    return pedagogical, citation, source
+
+
+@router.callback_query(QuizStates.answering, F.data.startswith("prof_quote:"))
+async def handle_prof_quote(callback: CallbackQuery, state: FSMContext):
+    """Show professor's transcript explanation in the same message, with a back button."""
+    q_id = int(callback.data.split(":")[1])
+    q = await db.get_question_by_id(q_id)
+    
+    if not q or not q.get("explanation"):
+        await callback.answer("لا يوجد شرح متاح لهذا السؤال.", show_alert=True)
+        return
+    
+    await callback.answer()
+    
+    # Format message text
+    question_text = q.get("question", "")
+    qa_block = f"<blockquote>❓ <b>السؤال :</b>\n{question_text}</blockquote>"
+    
+    explanation = q.get("explanation", "").strip()
+    full_text = f"{qa_block}\n\n{explanation}"
+    
+    # Bouton YouTube
+    youtube_url = None
+    yt_match = re.search(r'https?://(?:www\.)?(?:youtube\.com|youtu\.be)/[^\s\)"\'><]+', explanation)
+    if yt_match:
+        youtube_url = yt_match.group(0).strip()
+        
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    buttons = []
+    if youtube_url:
+        buttons.append([InlineKeyboardButton(text="🎥 مشاهدة على يوتيوب (YouTube)", url=youtube_url)])
+    buttons.append([InlineKeyboardButton(text="↩️ العودة للتصحيح", callback_data=f"back_to_corr:{q_id}")])
+    back_kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    from aiogram.types import LinkPreviewOptions
+    await callback.message.edit_text(
+        text=full_text,
+        reply_markup=back_kb,
+        parse_mode="HTML",
+        link_preview_options=LinkPreviewOptions(is_disabled=True)
+    )
+
+
+@router.callback_query(QuizStates.answering, F.data.startswith("back_to_corr:"))
+async def handle_back_to_corr(callback: CallbackQuery, state: FSMContext):
+    q_id = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    current_index = data.get("current_index", 0)
+    await callback.answer()
+    await render_question_correction(callback, state, current_index)
+
+
+@router.callback_query(QuizStates.answering, F.data == "quiz_next")
+async def handle_quiz_next(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    current_index = data.get("current_index")
+    next_index = current_index + 1
+    
+    await state.update_data(current_index=next_index)
+    questions = data.get("questions", [])
+    
+    if next_index >= len(questions):
+        await finish_quiz(callback, state)
+        await callback.answer()
+        return
+        
+    answers = data.get("answers", {})
+    if str(next_index) in answers:
+        await render_question_correction(callback, state, next_index)
+    else:
+        await show_question(callback, state)
+    await callback.answer()
+
+@router.callback_query(QuizStates.answering, F.data == "quiz_prev")
+async def handle_quiz_prev(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    current_index = data.get("current_index", 0)
+    if current_index > 0:
+        await render_question_correction(callback, state, current_index - 1)
+    await callback.answer()
+
+@router.callback_query(QuizStates.answering, F.data == "quiz_finish")
+async def handle_quiz_finish(callback: CallbackQuery, state: FSMContext):
+    await finish_quiz(callback, state)
+    await callback.answer()
+
+@router.callback_query(F.data == "quiz_exit")
+async def handle_quiz_exit(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    user_id = callback.from_user.id
+    from handlers.start import is_admin
+    stats = await db.get_user_overall_stats(user_id)
+    remaining = stats['not_done'] + stats['wrong']
+    await callback.message.edit_text(
+        "🚪 تم إنهاء الاختبار والعودة للقائمة الرئيسية.",
+        reply_markup=kb.get_main_inline_keyboard(is_admin=is_admin(user_id), remaining_count=remaining)
+    )
+    await callback.answer()
+
+async def finish_quiz(callback: CallbackQuery, state: FSMContext):
+    """Calculate and display final quiz results."""
+    data = await state.get_data()
+    questions = data.get("questions")
+    results = data.get("results", {})
+    settings = data.get("settings", DEFAULT_SETTINGS)
+    
+    total = len(questions)
+    correct_count = sum(1 for r in results.values() if r.get("is_correct"))
+    
+    # Calculate wrong questions to allow retrying them
+    wrong_questions = []
+    for i, q in enumerate(questions):
+        r = results.get(str(i), {})
+        if not r.get("is_correct"):
+            wrong_questions.append(q)
+            
+    # Transition to showing_results state to handle retry/new quiz options
+    await state.set_state(QuizStates.showing_results)
+    await state.update_data(wrong_questions=wrong_questions)
+    
+    percentage = int((correct_count / total) * 100) if total > 0 else 0
+    
+    correction_val = settings.get("correction", "immediate")
+    reply_markup = kb.get_quiz_results_keyboard(len(wrong_questions))
+    
+    if correction_val == "immediate":
+        result_text = (
+            f"🏁 <b>اكتمل الاختبار!</b>\n\n"
+            f"📊 النتيجة النهائية: <b>{correct_count} من {total}</b> ({percentage}%)\n\n"
+            f"🌟 أحسنت! يمكنك مراجعة أخطائك أو بدء اختبار جديد في أي وقت."
+        )
+        await callback.message.edit_text(result_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        summary_header = (
+            f"🏁 <b>نتيجة الاختبار:</b>\n\n"
+            f"📊 النتيجة الإجمالية: <b>{correct_count} من {total}</b> ({percentage}%)\n\n"
+            f"📝 <b>مراجعة الأسئلة وتفاصيل الإجابات:</b>\n"
+            f"=============================\n"
+        )
+        
+        review_details = ""
+        for i, q in enumerate(questions):
+            r = results.get(str(i), {})
+            user_ans = r.get("choice")
+            correct_ans = r.get("correct_choice")
+            elapsed = r.get("elapsed", 0.0)
+            is_timeout = r.get("is_timeout", False)
+            active_choices = r.get("active_choices", {})
+            
+            subject_ar = SUBJECT_MAP.get(q.get("subject", "").lower(), q.get("subject"))
+            
+            review_details += f"\n<b>السؤال {i + 1}:</b> <i>{q.get('question').strip()}</i>\n"
+            
+            if is_timeout:
+                review_details += f"⏱️ إجابتك: <b>انتهى الوقت</b> ❌\n"
+            elif r.get("is_correct"):
+                ans_text = active_choices.get(user_ans, "")
+                review_details += f"إجابتك: <b>{ARABIC_CHARS.get(user_ans, '').upper()}) {ans_text}</b> ✅ (في {elapsed:.1f}ث)\n"
+            else:
+                user_text = active_choices.get(user_ans, "")
+                correct_text = active_choices.get(correct_ans, "")
+                review_details += f"إجابتك: <s>{ARABIC_CHARS.get(user_ans, '').upper()}) {user_text}</s> ❌ (في {elapsed:.1f}ث)\n"
+                review_details += f"الجواب الصحيح: <b>{ARABIC_CHARS.get(correct_ans, '').upper()}) {correct_text}</b>\n"
+                
+            if q.get("explanation"):
+                review_details += f"💬 <b>قول الشيخ:</b>\n<blockquote>{q.get('explanation').strip()}</blockquote>\n"
+                
+            review_details += "-----------------------------\n"
+            
+        full_text = summary_header + review_details
+        chunks = split_text(full_text)
+        
+        if len(chunks) == 1:
+            await callback.message.edit_text(chunks[0], reply_markup=reply_markup, parse_mode="HTML")
+        else:
+            await callback.message.edit_text(chunks[0], parse_mode="HTML")
+            # Send subsequent chunks as new messages
+            for idx, chunk in enumerate(chunks[1:]):
+                is_last_chunk = (idx == len(chunks) - 2)
+                chunk_markup = reply_markup if is_last_chunk else None
+                await callback.message.answer(chunk, reply_markup=chunk_markup, parse_mode="HTML")
+
+# --- Generic Error Reporting Handlers ---
+
+ERROR_TYPE_MAP = {
+    "ans": "خطأ في الإجابة الصحيحة",
+    "text": "خطأ في نص السؤال (المنشأ)",
+    "choices": "خطأ في أحد الخيارات",
+    "other": "مشكلة أخرى / سبب آخر"
+}
+
+@router.callback_query(F.data.startswith("rep_q:"))
+async def handle_report_question_init(callback: CallbackQuery):
+    # Format: rep_q:{question_id}:{source}
+    parts = callback.data.split(":")
+    question_id = int(parts[1])
+    source = parts[2]
+    
+    await callback.message.edit_reply_markup(
+        reply_markup=kb.get_report_error_options_keyboard(question_id, source=source)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("rep_err:"))
+async def handle_report_error_submit(callback: CallbackQuery, state: FSMContext):
+    # Format: rep_err:{question_id}:{error_type}:{source}
+    parts = callback.data.split(":")
+    question_id = int(parts[1])
+    error_type = parts[2]
+    source = parts[3]
+    
+    # 1. Fetch question details
+    q = await db.get_question_by_id(question_id)
+    if not q:
+        await callback.answer("⚠️ السؤال غير موجود.", show_alert=True)
+        return
+        
+    user = callback.from_user
+    username_str = f"@{user.username}" if user.username else "لا يوجد"
+    error_label = ERROR_TYPE_MAP.get(error_type, error_type)
+    
+    # 2. Format ticket message
+    from config import TELEGRAM_SUPPORT_GROUP_ID
+    if TELEGRAM_SUPPORT_GROUP_ID:
+        try:
+            support_group_id = int(TELEGRAM_SUPPORT_GROUP_ID)
+            ticket_text = (
+                f"🚨 <b>تقرير عن خطأ في سؤال:</b>\n"
+                f"• نوع الخطأ: <b>{error_label}</b>\n"
+                f"• المُبلّغ: {user.full_name} ({username_str})\n"
+                f"• المعرف الرقمي: <code>{user.id}</code>\n"
+                f"• معرف السؤال (DB ID): <code>{question_id}</code>\n"
+                f"• الدرس: {q.get('course_number')} | المادة: {q.get('subject')}\n\n"
+                f"💬 <b>السؤال:</b>\n<blockquote>{(q.get('question') or '').strip()}</blockquote>"
+            )
+            # Send to admin support group
+            sent_msg = await callback.message.bot.send_message(
+                chat_id=support_group_id,
+                text=ticket_text,
+                parse_mode="HTML"
+            )
+            # Register ticket mapping to student
+            await db.register_support_ticket(sent_msg.message_id, user.id)
+        except Exception as e:
+            logger.error(f"Error sending error report ticket to admin group: {e}")
+            
+    await callback.answer("✅ تم إرسال البلاغ بنجاح للإدارة.", show_alert=True)
+    
+    # 3. Restore the layout depending on source
+    if source == "quiz":
+        is_fav = await db.is_favorite(user.id, question_id)
+        # Determine if it's the last question in the quiz
+        data = await state.get_data()
+        questions = data.get("questions", [])
+        current_index = data.get("current_index", 0)
+        is_last = (current_index + 1 >= len(questions))
+        has_prev = (current_index > 0)
+        
+        q = await db.get_question_by_id(question_id)
+        has_expl = bool(q.get("explanation")) if q else False
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.get_feedback_keyboard(question_id, is_fav, is_last, has_explanation=has_expl, has_prev=has_prev)
+        )
+    else:
+        # From support browser, restore browser nav
+        data = await state.get_data()
+        browser_ids = data.get("browser_ids", [])
+        idx = data.get("browser_idx", 0)
+        has_prev = idx > 0
+        has_next = idx < len(browser_ids) - 1
+        
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.get_question_browser_nav_keyboard(question_id, has_prev, has_next)
+        )
+
+@router.callback_query(F.data.startswith("rep_cancel:"))
+async def handle_report_cancel(callback: CallbackQuery, state: FSMContext):
+    # Format: rep_cancel:{question_id}:{source}
+    parts = callback.data.split(":")
+    question_id = int(parts[1])
+    source = parts[2]
+    
+    await callback.answer()
+    
+    if source == "quiz":
+        is_fav = await db.is_favorite(callback.from_user.id, question_id)
+        data = await state.get_data()
+        questions = data.get("questions", [])
+        current_index = data.get("current_index", 0)
+        is_last = (current_index + 1 >= len(questions))
+        has_prev = (current_index > 0)
+        
+        q = await db.get_question_by_id(question_id)
+        has_expl = bool(q.get("explanation")) if q else False
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.get_feedback_keyboard(question_id, is_fav, is_last, has_explanation=has_expl, has_prev=has_prev)
+        )
+    else:
+        data = await state.get_data()
+        browser_ids = data.get("browser_ids", [])
+        idx = data.get("browser_idx", 0)
+        has_prev = idx > 0
+        has_next = idx < len(browser_ids) - 1
+        
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.get_question_browser_nav_keyboard(question_id, has_prev, has_next)
+        )
+
+
+@router.callback_query(QuizStates.showing_results, F.data == "quiz_retry_errors")
+async def handle_quiz_retry_errors(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    wrong_questions = data.get("wrong_questions", [])
+    if not wrong_questions:
+        await callback.answer("⚠️ لا توجد أخطاء لإعادة محاولتها.", show_alert=True)
+        return
+    await callback.answer("🔄 جاري إعادة محاولة الأسئلة الخاطئة...")
+    settings = data.get("settings", DEFAULT_SETTINGS)
+    if settings.get("order", "random") == "random":
+        random.shuffle(wrong_questions)
+    await state.set_state(QuizStates.answering)
+    await state.update_data(questions=wrong_questions, current_index=0, answers={}, times={}, results={})
+    await show_question(callback, state)
+
+
+@router.callback_query(QuizStates.showing_results, F.data == "quiz_new_direct")
+async def handle_quiz_new_direct(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await callback.answer("⏳ جاري تحضير أسئلة جديدة...")
+    await initialize_and_start_quiz(callback, state, data)
+
+
+@router.callback_query(QuizStates.showing_results, F.data == "quiz_exit_results")
+async def handle_quiz_exit_results(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    user_id = callback.from_user.id
+    from handlers.start import is_admin
+    stats = await db.get_user_overall_stats(user_id)
+    remaining = stats['not_done'] + stats['wrong']
+    await callback.message.edit_text(
+        "🎓 <b>القائمة الرئيسية:</b>\n\n"
+        "اختر أحد الخيارات التالية لمتابعة المذاكرة والاختبارات:",
+        reply_markup=kb.get_main_inline_keyboard(is_admin=is_admin(user_id), remaining_count=remaining),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "q_ignored")
+async def handle_q_ignored(callback: CallbackQuery):
+    await callback.answer()
+
+
