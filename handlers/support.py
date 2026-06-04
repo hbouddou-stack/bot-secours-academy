@@ -1027,7 +1027,10 @@ async def handle_student_inbox(callback: CallbackQuery, state: FSMContext):
         else:
             text = (
                 "📬 <b>صندوق الرسائل والطلبات النشطة:</b>\n\n"
-                "اضغط على أي بلاغ لمراجعة التفاصيل وردود الإدارة:"
+                "الرسائل مرتبة كالتالي:\n"
+                "1️⃣ <b>(رد جديد):</b> رسائل تتطلب انتباهك\n"
+                "2️⃣ <b>(قيد المعالجة / في الانتظار):</b> طلبات جاري العمل عليها\n\n"
+                "اضغط على رقم التذكرة 🆔 لمراجعة التفاصيل:"
             )
         
     layout = await db.get_user_inbox_layout(user_id)

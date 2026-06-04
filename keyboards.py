@@ -1055,7 +1055,7 @@ def get_admin_ticket_keyboard(report_id: int) -> InlineKeyboardMarkup:
 # --- NEW SUPPORT & INBOX KEYBOARDS ---
 
 def get_student_inbox_keyboard(reports: list[dict], page: int = 1, show_archive: bool = False, layout: str = "chat") -> InlineKeyboardMarkup:
-    """List student reports in their inbox with pagination, supporting layout preference."""
+    """List student reports in their inbox with pagination, using a table (grid) layout."""
     rows = []
     status_icons = {
         "pending": "⏳",
@@ -1080,11 +1080,13 @@ def get_student_inbox_keyboard(reports: list[dict], page: int = 1, show_archive:
         "سبب آخر / مشكلة أخرى": "أخرى"
     }
     
-    # Filter reports
+    # Filter and sort reports: unread first, then pending/in_progress
     if show_archive:
         filtered_reports = [r for r in reports if r.get("status") in ("resolved", "rejected") and r.get("student_read", 1) == 1]
     else:
-        filtered_reports = [r for r in reports if r.get("status") in ("pending", "in_progress") or r.get("student_read", 0) == 0]
+        unread_reports = [r for r in reports if r.get("student_read", 1) == 0]
+        pending_reports = [r for r in reports if r.get("status") in ("pending", "in_progress") and r.get("student_read", 1) != 0]
+        filtered_reports = unread_reports + pending_reports
         
     items_per_page = 6
     total_pages = (len(filtered_reports) + items_per_page - 1) // items_per_page
@@ -1093,62 +1095,41 @@ def get_student_inbox_keyboard(reports: list[dict], page: int = 1, show_archive:
     start_idx = (page - 1) * items_per_page
     end_idx = start_idx + items_per_page
     
-    # Grid Layout Mode: Header row
-    if layout == "grid" and filtered_reports:
+    # Grid Layout Header
+    if filtered_reports:
         rows.append([
-            InlineKeyboardButton(text="الحالة/الرد ⚖️", callback_data="noop"),
-            InlineKeyboardButton(text="النوع 📂", callback_data="noop"),
+            InlineKeyboardButton(text="الحالة 🔔", callback_data="noop"),
+            InlineKeyboardButton(text="الموضوع 📂", callback_data="noop"),
             InlineKeyboardButton(text="الرقم 🆔", callback_data="noop")
         ])
     
     for r in filtered_reports[start_idx:end_idx]:
         status_val = r.get("status")
-        # Custom status label for new/unread
         is_unread = r.get("student_read", 1) == 0
-        
-        status_str = "🔔 رد جديد" if is_unread else status_icons.get(status_val, "⏳")
         raw_type = r.get("report_type")
         type_str = type_labels.get(raw_type, raw_type if raw_type else "بلاغ")
         
         ret_page_str = f"archive:{page}" if show_archive else f"active:{page}"
         cb_data = f"st_rep_view:{r['id']}:{ret_page_str}"
         
-        if layout == "grid":
-            # Grid presentation: [Status button, Type button, Ticket ID button]
-            if is_unread:
-                status_btn_text = "🔔 رد جديد"
-            elif status_val == "in_progress":
-                status_btn_text = "🟡 معالجة"
-            elif status_val == "pending":
-                status_btn_text = "⏳ معلق"
-            elif status_val == "resolved":
-                status_btn_text = "🟢 تم الحل"
-            elif status_val == "rejected":
-                status_btn_text = "❌ مرفوض"
-            else:
-                status_btn_text = status_icons.get(status_val, "⏳")
-                
-            rows.append([
-                InlineKeyboardButton(text=status_btn_text, callback_data=cb_data),
-                InlineKeyboardButton(text=type_str, callback_data=cb_data),
-                InlineKeyboardButton(text=f"#{r['id']}", callback_data=cb_data)
-            ])
+        if is_unread:
+            status_btn_text = "🔔 رد جديد"
+        elif status_val == "in_progress":
+            status_btn_text = "🟡 قيد المعالجة"
+        elif status_val == "pending":
+            status_btn_text = "⏳ في الانتظار"
+        elif status_val == "resolved":
+            status_btn_text = "🟢 تم الحل"
+        elif status_val == "rejected":
+            status_btn_text = "❌ مرفوض"
         else:
-            # Chat/Unified row presentation
-            if is_unread:
-                btn_text = f"🔔 #{r['id']} | {type_str} (رد جديد)"
-            elif status_val == "in_progress":
-                btn_text = f"🟡 #{r['id']} | {type_str} (قيد المعالجة)"
-            elif status_val == "pending":
-                btn_text = f"⏳ #{r['id']} | {type_str} (في الانتظار)"
-            elif status_val == "resolved":
-                btn_text = f"🟢 #{r['id']} | {type_str} (تم الحل)"
-            elif status_val == "rejected":
-                btn_text = f"❌ #{r['id']} | {type_str} (مرفوض)"
-            else:
-                btn_text = f"#{r['id']} | {status_str} | {type_str}"
-                
-            rows.append([InlineKeyboardButton(text=btn_text, callback_data=cb_data)])
+            status_btn_text = status_icons.get(status_val, "⏳")
+            
+        rows.append([
+            InlineKeyboardButton(text=status_btn_text, callback_data=cb_data),
+            InlineKeyboardButton(text=type_str, callback_data=cb_data),
+            InlineKeyboardButton(text=f"#{r['id']}", callback_data=cb_data)
+        ])
         
     if total_pages > 1:
         nav_row = []
