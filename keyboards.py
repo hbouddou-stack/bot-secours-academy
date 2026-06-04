@@ -37,22 +37,16 @@ def get_main_inline_keyboard(is_admin: bool = False, remaining_count: int = None
         
     rows = []
     
-    # Row 1: Start Quiz (Commencer un exercice)
+    # Row 1: Training Menu
     row1 = [
-        InlineKeyboardButton(text="📝 التمارين والامتحانات", callback_data="main_new_quiz")
+        InlineKeyboardButton(text="📝 أتدرب", callback_data="main_training_menu")
     ]
     rows.append(row1)
     
     # Row 1.5: Revision Library (full width)
     if "revision" not in hidden_buttons:
-        rows.append([InlineKeyboardButton(text="📖 مكتبتي الشاملة (البحث، الملخصات)", callback_data="main_revision")])
-        rows.append([InlineKeyboardButton(text="🚀 مسار المراجعة الموجه", callback_data="guided_path_start")])
+        rows.append([InlineKeyboardButton(text="📖 مكتبتي الشاملة", callback_data="main_revision")])
 
-    # Row 1.8: Examen Blanc and Search
-    rows.append([
-        InlineKeyboardButton(text="🎓 امتحان تجريبي", callback_data="exam_blanc_start"),
-        InlineKeyboardButton(text="🔍 محرك البحث", callback_data="rev_search_start")
-    ])    
     # Row 2: Favorites, Errors
     row2 = []
     if "favorites" not in hidden_buttons:
@@ -71,39 +65,30 @@ def get_main_inline_keyboard(is_admin: bool = False, remaining_count: int = None
     if row3:
         rows.append(row3)
         
-    # Row 4: Support (full row)
+    # Row 4: Support & Settings (Merged)
+    row4 = []
     if "support" not in hidden_buttons:
-        rows.append([InlineKeyboardButton(text="📞 الدعم", callback_data="main_support")])
-        
-    # Row 5: Settings (full row)
+        row4.append(InlineKeyboardButton(text="📞 الدعم", callback_data="main_support"))
     if "settings" not in hidden_buttons:
-        rows.append([InlineKeyboardButton(text="⚙️ الإعدادات", callback_data="main_settings")])
-    
-    # Add a Web App button for the student dashboard
-    webapp_url = os.getenv("WEBAPP_URL") or "http://localhost:8080"
-    if not webapp_url.endswith("/"):
-        webapp_url += "/"
-    rows.append([
-        InlineKeyboardButton(
-            text="🎓 أكاديمية الباجي — Mini App 📱",
-            web_app=WebAppInfo(url=f"{webapp_url}interactive.html?v=4")
-        )
-    ])
+        row4.append(InlineKeyboardButton(text="⚙️ إعداداتي", callback_data="main_settings"))
+    if row4:
+        rows.append(row4)
         
     if is_admin:
-        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
-        if admin_webapp.startswith("https"):
-            btn = InlineKeyboardButton(text="🖥️ لوحة التحكم Admin 📱", web_app=WebAppInfo(url=admin_webapp))
-            rows.append([
-                InlineKeyboardButton(text="🛠️ وضع المشرف", callback_data="main_admin"),
-                btn
-            ])
-        else:
-            # Localhost is NOT supported as a button url by Telegram. We only add the callback button.
-            rows.append([
-                InlineKeyboardButton(text="🛠️ وضع المشرف", callback_data="main_admin")
-            ])
+        # Mini App and Admin Dashboard are moved to get_admin_panel_keyboard, only keep Admin Mode here
+        rows.append([
+            InlineKeyboardButton(text="🛠️ وضع المشرف", callback_data="main_admin")
+        ])
         
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+def get_training_menu_keyboard() -> InlineKeyboardMarkup:
+    """Sub-menu for training options."""
+    rows = [
+        [InlineKeyboardButton(text="🎯 التدرّب على مادة / درس معين", callback_data="main_new_quiz")],
+        [InlineKeyboardButton(text="🎓 اجتياز امتحان تجريبي شامل", callback_data="exam_blanc_start")],
+        [InlineKeyboardButton(text="↩️ العودة للقائمة", callback_data="main_cancel")]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -798,10 +783,16 @@ def get_admin_panel_keyboard(pending_reports: int = 0, pending_proposals: int = 
         prop_text += f" ({pending_proposals} 🔴)"
         
     admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
+    student_webapp = os.getenv("WEBAPP_URL") or "http://localhost:8080"
+    if not student_webapp.endswith("/"):
+        student_webapp += "/"
+        
     rows = []
     if admin_webapp.startswith("https"):
-        btn = InlineKeyboardButton(text="🖥️ لوحة التحكم العامة (Inbox Admin) 📱", web_app=WebAppInfo(url=admin_webapp))
-        rows.append([btn])
+        btn_admin = InlineKeyboardButton(text="🖥️ لوحة التحكم Admin 📱", web_app=WebAppInfo(url=admin_webapp))
+        btn_mini = InlineKeyboardButton(text="🎓 أكاديمية الباجي — Mini App 📱", web_app=WebAppInfo(url=f"{student_webapp}interactive.html?v=4"))
+        rows.append([btn_admin])
+        rows.append([btn_mini])
         
     rows.extend([
         [InlineKeyboardButton(text=inbox_text, callback_data="admin_reports_center")],
@@ -2075,6 +2066,7 @@ def get_library_menu_keyboard() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(text="🔍 البحث الذكي في الدروس", callback_data="rev_study_search_start")],
         [InlineKeyboardButton(text="📚 ملخصات وخرائط المواد", callback_data="library_subjects")],
+        [InlineKeyboardButton(text="🚀 مسار المراجعة الموجه", callback_data="guided_path_start")],
         [InlineKeyboardButton(text="↩️ القائمة الرئيسية", callback_data="support_cancel")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)

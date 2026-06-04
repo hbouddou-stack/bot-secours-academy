@@ -721,6 +721,15 @@ async def handle_guide_finish(callback: CallbackQuery, state: FSMContext):
 
 # ─── Main Inline Menu Callback Handlers ───────────────────────────────────────────
 
+@router.callback_query(F.data == "main_training_menu")
+async def handle_main_training_menu(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.edit_text(
+        "📝 <b>أتدرب:</b>\n\nاختر نوع التدريب الذي تريده:",
+        reply_markup=kb.get_training_menu_keyboard(),
+        parse_mode="HTML"
+    )
+
 @router.callback_query(F.data == "main_new_quiz")
 async def handle_main_new_quiz(callback: CallbackQuery, state: FSMContext):
     await callback.answer("📚 جاري فتح قائمة المواد لبدء اختبار جديد...")
@@ -991,6 +1000,7 @@ async def handle_prog_browse(callback: CallbackQuery):
     await callback.answer()
 
 @router.callback_query(F.data == "prog_close")
+@router.callback_query(F.data == "main_cancel")
 async def handle_prog_close(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     user_id = callback.from_user.id
@@ -1014,7 +1024,10 @@ async def handle_prog_close(callback: CallbackQuery, state: FSMContext):
         reply_markup=kb.get_main_inline_keyboard(is_admin=is_admin(user_id), remaining_count=remaining, unread_count=unread_count),
         parse_mode="HTML"
     )
-    await callback.answer("🚪 تم إغلاق لوحة التقدم.")
+    if callback.data == "prog_close":
+        await callback.answer("🚪 تم إغلاق لوحة التقدم.")
+    else:
+        await callback.answer()
 
 @router.callback_query(F.data == "main_settings")
 async def handle_main_settings(callback: CallbackQuery, state: FSMContext = None):
