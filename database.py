@@ -1168,12 +1168,10 @@ async def get_available_sira_years() -> list[int]:
             return [row[0] for row in rows]
 
 async def get_available_sira_themes() -> list[str]:
-    """Retrieve all unique themes available for Sira questions, merging database question themes with course chapters."""
+    """Retrieve all unique themes available for Sira questions from the database."""
     themes = set()
     async with aiosqlite.connect(DATABASE_PATH) as db:
         try:
-            # Fetch from course_chapters
-            async with db.execute("SELECT DISTINCT title FROM course_chapters WHERE subject = 'sira' AND title IS NOT NULL AND title != ''") as cursor:
                 rows = await cursor.fetchall()
                 for r in rows:
                     themes.add(r[0].strip())
