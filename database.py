@@ -328,24 +328,28 @@ async def init_db():
         
         # Migration: Load course_chapters from sync file if present
         import os, json, logging
-        sync_file = os.path.join(os.path.dirname(__file__), "course_chapters_sync.json")
-        if os.path.exists(sync_file):
-            try:
-                with open(sync_file, 'r', encoding='utf-8') as f:
-                    chapters = json.load(f)
-                for c in chapters:
-                    await db.execute(
-                        """
-                        INSERT OR IGNORE INTO course_chapters 
-                        (subject, course_number, chapter_index, title, content, youtube_link, timestamp_seconds, vocabulary_spoilers) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (c["subject"], c["course_number"], c["chapter_index"], c["title"], c["content"], c.get("youtube_link"), c.get("timestamp_seconds"), c.get("vocabulary_spoilers"))
-                    )
-                logging.getLogger(__name__).info(f"Loaded {len(chapters)} course chapters from sync file.")
-                os.rename(sync_file, sync_file + ".done")
-            except Exception as e:
-                logging.getLogger(__name__).error(f"Failed to load course chapters sync file: {e}")
+        sync_files = [
+            os.path.join(os.path.dirname(__file__), "course_chapters_sync.json"),
+            os.path.join(os.path.dirname(__file__), "course_chapters_tajweed_sync.json")
+        ]
+        for sync_file in sync_files:
+            if os.path.exists(sync_file):
+                try:
+                    with open(sync_file, 'r', encoding='utf-8') as f:
+                        chapters = json.load(f)
+                    for c in chapters:
+                        await db.execute(
+                            """
+                            INSERT OR IGNORE INTO course_chapters 
+                            (subject, course_number, chapter_index, title, content, youtube_link, timestamp_seconds, vocabulary_spoilers) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (c["subject"], c["course_number"], c["chapter_index"], c["title"], c["content"], c.get("youtube_link"), c.get("timestamp_seconds"), c.get("vocabulary_spoilers"))
+                        )
+                    logging.getLogger(__name__).info(f"Loaded {len(chapters)} course chapters from {os.path.basename(sync_file)}.")
+                    os.rename(sync_file, sync_file + ".done")
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to load course chapters sync file {os.path.basename(sync_file)}: {e}")
         
         # Migration: Add display_preference to admins table if missing
         async with db.execute("PRAGMA table_info(admins)") as cursor:
