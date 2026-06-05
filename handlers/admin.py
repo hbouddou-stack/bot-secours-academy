@@ -3251,6 +3251,13 @@ async def generate_questions_from_text(prompt_text: str, subject: str, course_nu
                 "- theme: Must be either \"marfouat\" or \"tawabi\".\n"
                 "- hijra_year: Always null."
             )
+        elif subject == "tajweed":
+            subject_classification = (
+                "- theme: Must be the main Tajweed rule being tested (e.g. \"أحكام النون الساكنة\", \"المدود\").\n"
+                "- IMPORTANT: Create practical questions where you provide a short Quranic verse (Ayah) or word mentioned in the lesson, and ask the student to identify the Tajweed rule applied. Ensure you ONLY use verses that are explicitly written in the provided text to avoid any errors in the Quranic text.\n"
+                "- Prefix the question with \"🟣 \" so the admin knows this is a new Tajweed question to verify.\n"
+                "- hijra_year: Always null."
+            )
         elif subject == "aqeeda":
             subject_classification = (
                 "- theme: Must be either \"tawhid\" or \"firaq\".\n"
