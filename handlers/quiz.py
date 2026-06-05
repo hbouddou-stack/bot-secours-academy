@@ -325,7 +325,7 @@ async def show_question(callback: CallbackQuery, state: FSMContext):
             sec = 60
         text += f"\n⏱️ <i>لديك {sec} ثانية للإجابة!</i>\n"
         
-    text += "\n──────────────────\n"
+    text += "\n──────────────────────────────\n"
     session_mastered = data.get("session_mastered", 0)
     mastered_str = f" | 🏅 \u202b{session_mastered} مُتقَن\u202c" if session_mastered > 0 else ""
     text += (
@@ -926,7 +926,7 @@ async def render_question_correction(callback: CallbackQuery, state: FSMContext,
         else:
             text += f"<blockquote>{ARABIC_CHARS[k]}) {v_clean}</blockquote>\n"
             
-    text += "\n──────────────────\n"
+    text += "\n──────────────────────────────\n"
     if is_timeout:
         text += "⌛ <b>انتهى الوقت! (تجاوزت حد الوقت المسموح)</b>\n\n"
     elif is_correct:

@@ -317,6 +317,12 @@ async def init_db():
             if 'is_active' not in columns:
                 await db.execute("ALTER TABLE questions ADD COLUMN is_active INTEGER DEFAULT 1;")
                 
+        # Migration: Clean up Sira themes on remote persistent DB
+        await db.execute("UPDATE questions SET theme='العبادات والمعاملات والتشريعات' WHERE theme='فرض زكاة الفطر وتعدد الآراء في زكاة المال'")
+        await db.execute("UPDATE questions SET theme='بيت النبوة والحياة الشخصية' WHERE theme='أحداث أعقبت بدر: وفاة رقية، زواج فاطمة، وإسلام العباس'")
+        await db.execute("UPDATE questions SET theme='العهود والوفود والعلاقات الخارجية' WHERE theme='الصد عن العمرة وبيعة الرضوان'")
+        await db.execute("UPDATE questions SET source='official' WHERE subject='sira' AND hijra_year IS NOT NULL AND source='generated_by_gemini'")
+        
         # Migration: Add display_preference to admins table if missing
         async with db.execute("PRAGMA table_info(admins)") as cursor:
             columns = [row[1] for row in await cursor.fetchall()]
