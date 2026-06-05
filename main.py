@@ -2101,9 +2101,9 @@ async def admin_questions_list(request):
                 base_query += f" AND LOWER(subject) IN ({placeholders})"
                 params.extend([s.lower() for s in subj_variants])
                 
-                base_query += " AND course_number = ?"
-                params.append(int(lesson_num))
-                
+                if lesson_num and str(lesson_num).lower() != 'all':
+                    base_query += " AND course_number = ?"
+                    params.append(int(lesson_num))
                 if source:
                     if source == 'official':
                         base_query += " AND (source IS NULL OR source = '' OR source = 'official' OR source NOT IN ('student_proposal', 'ai_generated', 'generated_by_gemini'))"

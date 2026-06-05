@@ -144,7 +144,11 @@ window.addEventListener('unhandledrejection', function(e) {
 
             if (activeBtn) activeBtn.classList.add('active');
 
-            renderInbox();
+            if (state.dashboardScope === 'question_bank') {
+                loadQuestions();
+            } else {
+                renderInbox();
+            }
 
         }
 
@@ -8409,7 +8413,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
             
 
-            if (state.qbViewMode === 'table') {
+            if (state.qbViewMode === 'table' || state.qbViewMode === 'panoramic') {
 
                 const subjFilter = document.getElementById('qb-subject-filter');
 
@@ -8426,6 +8430,7 @@ window.addEventListener('unhandledrejection', function(e) {
                     }
 
                     updateLessonFilterDropdown();
+                    updateThemeFilterDropdown();
 
                 }
 
@@ -8855,7 +8860,7 @@ window.addEventListener('unhandledrejection', function(e) {
                     const choicesHtml = choices.map((c, i) => {
                         const choiceText = q[`choice_${c}`];
                         if (!choiceText) return '';
-                        const isCorrect = q.correct_answer === c;
+                        const isCorrect = (q.correct_answer || '').toLowerCase().trim() === c.toLowerCase();
                         const bg = isCorrect ? 'var(--success-light)' : 'transparent';
                         const border = isCorrect ? '1px solid var(--success)' : '1px solid var(--border)';
                         const color = isCorrect ? 'var(--success)' : 'var(--text-secondary)';
