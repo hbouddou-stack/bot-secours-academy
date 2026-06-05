@@ -3193,9 +3193,12 @@ function renderFc() {
             <div id="fc-back" style="display:none; border-top:1px dashed #e2e8f0; margin-top:14px; padding-top:12px;">
                 <div class="block-citation" style="font-size:13px; line-height:1.6; color:var(--text-2);">${fc.citation}</div>
                 ${fc.video_link ? `
-                <a href="${fc.video_link}" target="_blank" class="btn-sm" style="margin-top:10px; display:inline-flex; align-items:center; gap:6px; background:var(--primary-light); color:var(--primary); text-decoration:none; font-weight:700;" onclick="event.stopPropagation()">
-                    🎬 شاهد الشرح في الفيديو (${fc.timestamp})
-                </a>` : ''}
+                <div style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 10px;">
+                    <a href="${fc.video_link}" target="_blank" class="btn-sm" style="display:inline-flex; align-items:center; gap:6px; background:var(--primary-light); color:var(--primary); text-decoration:none; font-weight:700;" onclick="event.stopPropagation()">
+                        🎬 شاهد الشرح في الفيديو (${fc.timestamp})
+                    </a>
+                    <span style="font-size: 11px; font-style: italic; color: var(--text-3); margin-top: 4px;">(يمكنك الضغط على الوقت باللون الأزرق للوصول إلى الفيديو)</span>
+                </div>` : ''}
             </div>
         </div>
         
@@ -4290,7 +4293,9 @@ function openModal(subject, lessonNum, tab) {
     document.getElementById('modal-overlay').classList.add('open');
     
     // Telegram API Integrations
-    if (tg) {
+    if (tg && tg.BackButton) {
+        if (typeof backToSubjects === 'function') tg.BackButton.offClick(backToSubjects);
+        if (typeof backToSyllabusSubjects === 'function') tg.BackButton.offClick(backToSyllabusSubjects);
         tg.BackButton.show();
         tg.BackButton.onClick(closeModal);
         try { tg.HapticFeedback.impactOccurred('medium'); } catch(e){}
@@ -4724,11 +4729,16 @@ function closeModal(){
     activeLesson = null;
     
     // Telegram API Integrations
-    if (tg) {
+    if (tg && tg.BackButton) {
+        tg.BackButton.offClick(closeModal);
+        
         if (typeof selectedSubjectKey !== 'undefined' && selectedSubjectKey && typeof backToSubjects === 'function') {
             // Restore BackButton action to return to subjects grid
             tg.BackButton.show();
             tg.BackButton.onClick(backToSubjects);
+        } else if (typeof selectedSyllabusSubject !== 'undefined' && selectedSyllabusSubject && typeof backToSyllabusSubjects === 'function') {
+            tg.BackButton.show();
+            tg.BackButton.onClick(backToSyllabusSubjects);
         } else {
             // Hide BackButton if not inside a specific subject lessons list
             tg.BackButton.hide();
@@ -4931,6 +4941,10 @@ function renderChapterFlashQuestion(lesson, cIdx) {
         <div class="flash-q-explanation">
             <strong>${isCorrect ? '✨ إجابة صحيحة!' : '❌ إجابة خاطئة.'}</strong>
             <p>${qObj.explanation || ''}</p>
+            ${cIdx < (lesson.thematic_blocks ? lesson.thematic_blocks.length - 1 : 0) ? `
+            <button class="btn-sm btn-primary" onclick="scrollToChapter(${cIdx + 1})" style="width: 100%; margin-top: 12px; padding: 10px; justify-content: center; font-weight: 800; border-radius: 10px;">
+                السؤال التالي ⬇️
+            </button>` : ''}
         </div>`;
     }
     
@@ -5010,6 +5024,10 @@ function submitFlashAnswer(btn, subject, lessonNum, chIdx, selectedIdx) {
         <div class="flash-q-explanation">
             <strong>${isCorrect ? '✨ إجابة صحيحة!' : '❌ إجابة خاطئة.'}</strong>
             <p>${qObj.explanation || ''}</p>
+            ${chIdx < (lesson.thematic_blocks ? lesson.thematic_blocks.length - 1 : 0) ? `
+            <button class="btn-sm btn-primary" onclick="scrollToChapter(${chIdx + 1})" style="width: 100%; margin-top: 12px; padding: 10px; justify-content: center; font-weight: 800; border-radius: 10px;">
+                السؤال التالي ⬇️
+            </button>` : ''}
         </div>`;
     }
 }
@@ -6439,10 +6457,17 @@ function formatQuizExplanation(rawHtml) {
     // Highlight 📍 المصدر section with a special amber box
     html = html.replace(
         /(📍\s*<b>المصدر\s*:<\/b>\s*\n?<blockquote>)([\s\S]*?)(<\/blockquote>)/g,
-        '<div style="background:#fef9c3; border:1.5px solid #fde047; border-radius:10px; padding:8px 12px; margin-top:8px; font-size:12px; direction:rtl;">' +
-        '📍 <strong style="color:#854d0e;">المصدر</strong><br>$2' +
-        '</div>'
+        function(match, p1, p2, p3) {
+            // Convert newlines in the blockquote content to <br> so the line breaks are respected
+            const contentWithBr = p2.trim().replace(/\n/g, '<br>');
+            return '<div style="background:#fef9c3; border:1.5px solid #fde047; border-radius:10px; padding:8px 12px; margin-top:8px; font-size:12px; direction:rtl;">' +
+                   '📍 <strong style="color:#854d0e;">المصدر</strong><br>' + contentWithBr +
+                   '</div>';
+        }
     );
+    
+    // Also try to format the specific text in italics if it's there
+    html = html.replace(/\(يمكنك الضغط على الوقت باللون الأزرق للوصول إلى الفيديو\)/g, '<br><span style="font-size: 11px; font-style: italic; color: #854d0e;">(يمكنك الضغط على الوقت باللون الأزرق للوصول إلى الفيديو)</span>');
     
     return html;
 }
@@ -6553,9 +6578,12 @@ function submitAnswer(selectedIdx) {
             </div>
             <div class="quiz-feedback-text" style="margin-top: 6px;">${formatQuizExplanation(q.explanation)}</div>
             ${q.video_link ? `
-            <a href="${q.video_link}" target="_blank" class="reader-p-play" style="display: inline-flex; align-self: flex-start; margin-top: 8px; text-decoration: none;" onclick="event.stopPropagation()">
-                🎬 شاهد الشرح في الفيديو (دقيقة ${q.timestamp})
-            </a>` : ''}
+            <div style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 8px;">
+                <a href="${q.video_link}" target="_blank" class="reader-p-play" style="display: inline-flex; text-decoration: none;" onclick="event.stopPropagation()">
+                    🎬 شاهد الشرح في الفيديو (دقيقة ${q.timestamp})
+                </a>
+                <span style="font-size: 11px; font-style: italic; color: var(--text-3); margin-top: 4px;">(يمكنك الضغط على الوقت باللون الأزرق للوصول إلى الفيديو)</span>
+            </div>` : ''}
         </div>
     `;
 
