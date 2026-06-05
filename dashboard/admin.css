@@ -821,7 +821,7 @@
 
             padding: 18px;
 
-            z-index: 80;
+            z-index: 950;
 
             border-radius: 0 var(--radius-md) var(--radius-md) 0;
 
@@ -4672,7 +4672,7 @@
 
             max-height: 100vh !important;
 
-            z-index: 80 !important;
+            z-index: 950 !important;
 
             border-radius: 0 var(--radius-md) var(--radius-md) 0 !important;
 
