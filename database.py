@@ -327,7 +327,7 @@ async def init_db():
         await db.execute("UPDATE questions SET explanation = REPLACE(explanation, 'تفريغ الدرس (', 'تفريغ الدرس ' || course_number || ' (') WHERE subject='sira' AND explanation LIKE '%تفريغ الدرس (%'")
         
         # Migration: Load course_chapters from sync file if present
-        import os, json, logging
+        import json
         sync_files = [
             os.path.join(os.path.dirname(__file__), "course_chapters_sync.json"),
             os.path.join(os.path.dirname(__file__), "course_chapters_tajweed_sync.json")

@@ -318,13 +318,17 @@ def get_themes_grid_keyboard(subject: str, selected_themes: list[str] = None, av
         for idx, th in enumerate(available_themes):
             if th in hidden_themes:
                 continue
-            row.append(InlineKeyboardButton(
-                text=th,
-                callback_data=f"select_th:{idx}"
-            ))
-            if len(row) == 2:
-                rows.append(row)
-                row = []
+            btn = InlineKeyboardButton(text=th, callback_data=f"select_th:{idx}")
+            if len(th) >= 28:
+                if row:
+                    rows.append(row)
+                    row = []
+                rows.append([btn])
+            else:
+                row.append(btn)
+                if len(row) == 2:
+                    rows.append(row)
+                    row = []
         if row:
             rows.append(row)
     else:
@@ -332,13 +336,18 @@ def get_themes_grid_keyboard(subject: str, selected_themes: list[str] = None, av
         for th_key, th_info in subject_themes.items():
             if th_key in hidden_themes:
                 continue
-            row.append(InlineKeyboardButton(
-                text=th_info['label'],
-                callback_data=f"select_th:{th_key}"
-            ))
-            if len(row) == 2:
-                rows.append(row)
-                row = []
+            lbl = th_info['label']
+            btn = InlineKeyboardButton(text=lbl, callback_data=f"select_th:{th_key}")
+            if len(lbl) >= 28:
+                if row:
+                    rows.append(row)
+                    row = []
+                rows.append([btn])
+            else:
+                row.append(btn)
+                if len(row) == 2:
+                    rows.append(row)
+                    row = []
         if row:
             rows.append(row)
             

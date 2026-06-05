@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(dotenv_path=_env_path)
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8761618853:AAESRAU4EoENxfLa7mRx_pXUmEWEMTj1Q6M")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_SUPPORT_GROUP_ID = os.getenv("TELEGRAM_SUPPORT_GROUP_ID", "").strip()
 TELEGRAM_ADMIN_IDS = [
     int(x.strip()) for x in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",") if x.strip().isdigit()

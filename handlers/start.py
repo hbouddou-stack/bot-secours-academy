@@ -15,6 +15,7 @@ class RegistrationStates(StatesGroup):
     waiting_for_custom_name = State()
     waiting_for_academic_year = State()
     waiting_for_preferred_subject = State()
+    editing_preferred_subject = State()
     waiting_for_favorite_subjects = State()
     waiting_for_difficult_subjects = State()
 
@@ -491,13 +492,15 @@ async def handle_register_year(callback: CallbackQuery, state: FSMContext):
     if year_str != "skip":
         await db.update_user_academic_year(user_id, int(year_str))
         await callback.answer("✅ تم حفظ السنة الدراسية بنجاح.")
-    else:
         await callback.answer("⏭️ تم تخطي تحديد السنة الدراسية.")
         
-    await start_preferred_subject_selection(callback, state)
+    await start_preferred_subject_selection(callback, state, is_editing=False)
 
-async def start_preferred_subject_selection(message_or_callback_msg, state: FSMContext):
-    await state.set_state(RegistrationStates.waiting_for_preferred_subject)
+async def start_preferred_subject_selection(message_or_callback_msg, state: FSMContext, is_editing: bool = False):
+    if is_editing:
+        await state.set_state(RegistrationStates.editing_preferred_subject)
+    else:
+        await state.set_state(RegistrationStates.waiting_for_preferred_subject)
     
     text = (
         "🎯 <b>تحديد المادة التلقائية:</b>\n\n"
@@ -534,14 +537,14 @@ async def handle_pref_sub_selected(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"🎯 تم تحديد {sub_ar} كمادة تلقائية.")
         
     current_state = await state.get_state()
-    if current_state == RegistrationStates.waiting_for_preferred_subject:
+    if current_state == RegistrationStates.waiting_for_preferred_subject.state:
         await start_favorite_subjects_selection(callback, state)
     else:
         await handle_main_settings(callback, state)
 
 @router.callback_query(F.data == "edit_preferred_subject")
 async def handle_edit_preferred_subject(callback: CallbackQuery, state: FSMContext):
-    await start_preferred_subject_selection(callback, state)
+    await start_preferred_subject_selection(callback, state, is_editing=True)
     await callback.answer()
 
 async def start_favorite_subjects_selection(message_or_callback_msg, state: FSMContext):
