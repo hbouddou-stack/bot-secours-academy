@@ -2108,6 +2108,10 @@ async def admin_questions_list(request):
                     words = "".join(c if c.isalnum() or c.isspace() else " " for c in text.lower()).split()
                     return {w for w in words if w not in stop_words and len(w) > 2}
                 
+                if c_chaps:
+                    for ch in c_chaps:
+                        ch["clean_words"] = clean_words((ch["title"] or "") + " " + (ch.get("content") or ""))
+
                 filtered_questions = []
                 target_idx = int(chapter_idx)
                 for q in all_matching_questions:
@@ -2117,8 +2121,7 @@ async def admin_questions_list(request):
                         best_ch_idx = None
                         best_score = -1
                         for ch in c_chaps:
-                            ch_words = clean_words(ch["title"] + " " + ch["content"])
-                            score = len(q_words.intersection(ch_words))
+                            score = len(q_words.intersection(ch["clean_words"]))
                             if score > best_score:
                                 best_score = score
                                 best_ch_idx = ch["chapter_index"]
@@ -2298,6 +2301,10 @@ async def get_questions_stats_api(request):
             words = "".join(c if c.isalnum() or c.isspace() else " " for c in text.lower()).split()
             return {w for w in words if w not in stop_words and len(w) > 2}
 
+        # Pre-compute chapter words to speed up heuristic
+        for ch in chapters:
+            ch["clean_words"] = clean_words((ch["title"] or "") + " " + (ch.get("content") or ""))
+
         all_courses = set()
         for q in questions:
             subj = q["subject"].lower().strip()
@@ -2362,8 +2369,7 @@ async def get_questions_stats_api(request):
                 best_ch_idx = None
                 best_score = -1
                 for ch in c_chaps:
-                    ch_words = clean_words(ch["title"] + " " + ch["content"])
-                    score = len(q_words.intersection(ch_words))
+                    score = len(q_words.intersection(ch["clean_words"]))
                     if score > best_score:
                         best_score = score
                         best_ch_idx = ch["chapter_index"]
