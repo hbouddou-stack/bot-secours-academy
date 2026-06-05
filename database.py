@@ -323,6 +323,9 @@ async def init_db():
         await db.execute("UPDATE questions SET theme='العهود والوفود والعلاقات الخارجية' WHERE theme='الصد عن العمرة وبيعة الرضوان'")
         await db.execute("UPDATE questions SET source='official' WHERE subject='sira' AND hijra_year IS NOT NULL AND source='generated_by_gemini'")
         
+        # Migration: Inject course_number into Sira source where it's missing
+        await db.execute("UPDATE questions SET explanation = REPLACE(explanation, 'تفريغ الدرس (', 'تفريغ الدرس ' || course_number || ' (') WHERE subject='sira' AND explanation LIKE '%تفريغ الدرس (%'")
+        
         # Migration: Add display_preference to admins table if missing
         async with db.execute("PRAGMA table_info(admins)") as cursor:
             columns = [row[1] for row in await cursor.fetchall()]

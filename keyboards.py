@@ -555,7 +555,6 @@ def get_feedback_keyboard(question_id: int, is_fav: bool, is_last: bool = False,
     
     rows = []
     
-    # 1. Navigation Row (Next / Prev)
     nav_row = []
     if has_prev:
         nav_row.append(InlineKeyboardButton(text="⬅️ السؤال السابق", callback_data="quiz_prev"))

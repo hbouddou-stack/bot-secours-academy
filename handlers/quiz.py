@@ -325,11 +325,12 @@ async def show_question(callback: CallbackQuery, state: FSMContext):
             sec = 60
         text += f"\n⏱️ <i>لديك {sec} ثانية للإجابة!</i>\n"
         
-    text += "\n──────────────────────────────\n"
+    text += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     session_mastered = data.get("session_mastered", 0)
     mastered_str = f" | 🏅 \u202b{session_mastered} مُتقَن\u202c" if session_mastered > 0 else ""
+    theme_str = f"\n📚 <b>المحور:</b> {q.get('theme')}" if q.get("subject") == "sira" and q.get("theme") else ""
     text += (
-        f"📝 <b>السؤال {current_index + 1} من {len(questions)}</b> | <b>الدرس {q.get('course_number')}</b> ({subject_ar}){mastered_str}\n"
+        f"📝 <b>السؤال {current_index + 1} من {len(questions)}</b> | <b>الدرس {q.get('course_number')}</b> ({subject_ar}){mastered_str}{theme_str}\n"
         f"📊 {progress_bar} {int(progress_ratio * 100)}%"
     )
         
@@ -926,7 +927,7 @@ async def render_question_correction(callback: CallbackQuery, state: FSMContext,
         else:
             text += f"<blockquote>{ARABIC_CHARS[k]}) {v_clean}</blockquote>\n"
             
-    text += "\n──────────────────────────────\n"
+    text += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     if is_timeout:
         text += "⌛ <b>انتهى الوقت! (تجاوزت حد الوقت المسموح)</b>\n\n"
     elif is_correct:
@@ -934,8 +935,9 @@ async def render_question_correction(callback: CallbackQuery, state: FSMContext,
     else:
         text += f"❌ <b>إجابة خاطئة.</b>\n\n"
         
+    theme_str = f"\n📚 <b>المحور:</b> {q.get('theme')}" if q.get("subject") == "sira" and q.get("theme") else ""
     text += (
-        f"📝 <b>السؤال {index + 1} من {len(questions)}</b> | <b>الدرس {q.get('course_number')}</b> ({subject_ar})\n"
+        f"📝 <b>السؤال {index + 1} من {len(questions)}</b> | <b>الدرس {q.get('course_number')}</b> ({subject_ar}){theme_str}\n"
         f"📊 {progress_bar} {int(progress_ratio * 100)}%"
     )
         
