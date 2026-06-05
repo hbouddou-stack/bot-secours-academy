@@ -1277,7 +1277,15 @@ async def handle_prof_quote(callback: CallbackQuery, state: FSMContext):
         parts_list.append(f"📖 <b>{teacher} يقول :</b>\n<blockquote>\u200f{cit_clean}</blockquote>")
     if source:
         source_clean = clean_islamic_salutations(source.replace("<blockquote>", "").replace("</blockquote>", "").strip())
-        parts_list.append(f"📍 <b>المصدر :</b>\n<blockquote>\u200f{source_clean}\n\n<i>(يمكنك الضغط على الوقت للوصول إلى الفيديو)</i></blockquote>")
+        import re
+        # Remove any existing variations of the hint
+        source_clean = re.sub(r'<\s*i\s*>\s*\(اضغط على التوقيت للانتقال لشرح الفيديو 🎥\)\s*<\s*/i\s*>', '', source_clean)
+        source_clean = re.sub(r'\s*\(اضغط على التوقيت للانتقال لشرح الفيديو 🎥\)\s*', '', source_clean)
+        source_clean = re.sub(r'<\s*i\s*>\s*\(يمكنك الضغط على الوقت للوصول إلى الفيديو\)\s*<\s*/i\s*>', '', source_clean)
+        source_clean = re.sub(r'\s*\(يمكنك الضغط على الوقت للوصول إلى الفيديو\)\s*', '', source_clean)
+        
+        hint = "<i>(اضغط على التوقيت للانتقال لشرح الفيديو 🎥)</i>"
+        parts_list.append(f"📍 <b>المصدر :</b>\n<blockquote>\u200f{source_clean.strip()}\n\n{hint}</blockquote>")
         
     full_text = f"{qa_block}\n\n" + "\n\n".join(parts_list)
     
@@ -1291,12 +1299,14 @@ async def handle_prof_quote(callback: CallbackQuery, state: FSMContext):
     buttons = []
     if youtube_url:
         buttons.append([InlineKeyboardButton(text="🎥 مشاهدة على يوتيوب (YouTube)", url=youtube_url)])
-    buttons.append([InlineKeyboardButton(text="⚠️ خطأ في الشرح", callback_data=f"report_expl_start:{q_id}")])
-    buttons.append([InlineKeyboardButton(text="↩️ العودة", callback_data=f"back_to_corr:{q_id}")])
-    
+        
+    nav_row = [InlineKeyboardButton(text="⚠️ خطأ في الشرح", callback_data=f"report_expl_start:{q_id}")]
     current_state = await state.get_state()
     if current_state == QuizStates.answering.state:
-        buttons.append([InlineKeyboardButton(text="⏭️ السؤال التالي", callback_data="quiz_next")])
+        nav_row.append(InlineKeyboardButton(text="⏭️ السؤال التالي", callback_data="quiz_next"))
+        
+    buttons.append(nav_row)
+    buttons.append([InlineKeyboardButton(text="↩️ العودة", callback_data=f"back_to_corr:{q_id}")])
         
     back_kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     
