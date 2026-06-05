@@ -57,7 +57,8 @@ async def init_db():
                 source TEXT,
                 created_at TEXT,
                 hijra_year INTEGER,
-                theme TEXT
+                theme TEXT,
+                sub_theme TEXT
             );
         """)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_questions_subject ON questions(subject);")
@@ -316,6 +317,8 @@ async def init_db():
             columns = [row[1] for row in await cursor.fetchall()]
             if 'is_active' not in columns:
                 await db.execute("ALTER TABLE questions ADD COLUMN is_active INTEGER DEFAULT 1;")
+            if 'sub_theme' not in columns:
+                await db.execute("ALTER TABLE questions ADD COLUMN sub_theme TEXT;")
                 
         # Migration: Clean up Sira themes on remote persistent DB
         await db.execute("UPDATE questions SET theme='العبادات والمعاملات والتشريعات' WHERE theme='فرض زكاة الفطر وتعدد الآراء في زكاة المال'")

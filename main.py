@@ -2063,6 +2063,8 @@ async def admin_questions_list(request):
         source = data.get('source', '')
         search = data.get('search', '')
         chapter_idx = data.get('chapterIdx', '')
+        theme_filter = data.get('theme', '')
+        subtheme_filter = data.get('sub_theme', '')
         
         if not await check_admin(user_id):
             return web.json_response({"success": False, "error": "Access denied"}, status=403)
@@ -2116,6 +2118,14 @@ async def admin_questions_list(request):
                 if search:
                     base_query += " AND question LIKE ?"
                     params.append(f"%{search}%")
+                    
+                if theme_filter:
+                    base_query += " AND theme = ?"
+                    params.append(theme_filter)
+                    
+                if subtheme_filter:
+                    base_query += " AND sub_theme = ?"
+                    params.append(subtheme_filter)
                     
                 base_query += " ORDER BY id"
                 
@@ -2235,6 +2245,16 @@ async def admin_questions_list(request):
                 count_query += " AND question LIKE ?"
                 params.append(f"%{search}%")
                 
+            if theme_filter:
+                query += " AND theme = ?"
+                count_query += " AND theme = ?"
+                params.append(theme_filter)
+                
+            if subtheme_filter:
+                query += " AND sub_theme = ?"
+                count_query += " AND sub_theme = ?"
+                params.append(subtheme_filter)
+                
             query += " ORDER BY subject, course_number, id LIMIT ? OFFSET ?"
             
             async with db_conn.execute(count_query, params) as cur:
@@ -2278,6 +2298,49 @@ async def admin_questions_list(request):
     except Exception as e:
         logger.error(f"Error in admin_questions_list: {e}")
         return web.json_response({"success": False, "error": str(e)}, status=500)
+
+async def admin_get_themes(request):
+    try:
+        data = await request.json()
+        user_id = data.get('userId')
+        if not await check_admin(user_id):
+            return web.json_response({"success": False, "error": "Access denied"}, status=403)
+            
+        subject = data.get('subject', '')
+        theme = data.get('theme', '')
+        
+        if not subject:
+            return web.json_response({"success": False, "error": "Missing subject"}, status=400)
+            
+        from config import DATABASE_PATH
+        import aiosqlite
+        
+        subj_variants = [subject]
+        if subject.lower() in ('aqida', 'aqeeda'):
+            subj_variants = ['aqida', 'aqeeda']
+        placeholders = ','.join('?' * len(subj_variants))
+            
+        async with aiosqlite.connect(DATABASE_PATH) as db_conn:
+            db_conn.row_factory = aiosqlite.Row
+            if not theme:
+                # Get all unique themes for subject
+                query = f"SELECT DISTINCT theme FROM questions WHERE LOWER(subject) IN ({placeholders}) AND theme IS NOT NULL AND theme != '' ORDER BY theme"
+                async with db_conn.execute(query, [s.lower() for s in subj_variants]) as cur:
+                    rows = await cur.fetchall()
+                results = [r['theme'] for r in rows]
+                return web.json_response({"success": True, "themes": results})
+            else:
+                # Get all unique sub_themes for subject and theme
+                query = f"SELECT DISTINCT sub_theme FROM questions WHERE LOWER(subject) IN ({placeholders}) AND theme = ? AND sub_theme IS NOT NULL AND sub_theme != '' ORDER BY sub_theme"
+                params = [s.lower() for s in subj_variants] + [theme]
+                async with db_conn.execute(query, params) as cur:
+                    rows = await cur.fetchall()
+                results = [r['sub_theme'] for r in rows]
+                return web.json_response({"success": True, "sub_themes": results})
+    except Exception as e:
+        logger.error(f"Error in admin_get_themes: {e}")
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
 
 async def get_questions_stats_api(request):
     try:
@@ -3414,6 +3477,7 @@ async def start_web_server(bot: Bot):
     app.router.add_post('/admin/test-group', test_telegram_group)
     app.router.add_post('/admin/broadcast', admin_broadcast)
     app.router.add_post('/admin/questions-list', admin_questions_list)
+    app.router.add_post('/admin/get-themes', admin_get_themes)
     app.router.add_post('/admin/questions/stats', get_questions_stats_api)
     app.router.add_post('/admin/info', get_admin_info)
     app.router.add_post('/admin/settings', get_admin_settings)

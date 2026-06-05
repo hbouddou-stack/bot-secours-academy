@@ -6794,6 +6794,90 @@ window.addEventListener('unhandledrejection', function(e) {
 
         }
 
+        async function updateThemeFilterDropdown() {
+            const subject = document.getElementById('qb-subject-filter').value;
+            const themeSelect = document.getElementById('qb-theme-filter');
+            const subthemeSelect = document.getElementById('qb-subtheme-filter');
+            
+            if (!themeSelect || !subthemeSelect) return;
+            
+            themeSelect.innerHTML = '<option value="">كل المحاور الكبرى</option>';
+            subthemeSelect.innerHTML = '<option value="">كل الجزئيات</option>';
+            subthemeSelect.disabled = true;
+            
+            if (!subject) {
+                themeSelect.disabled = true;
+                themeSelect.style.display = 'none';
+                subthemeSelect.style.display = 'none';
+                return;
+            }
+            
+            themeSelect.disabled = true;
+            try {
+                const response = await fetch('/admin/get-themes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: state.userId, subject: subject })
+                });
+                const data = await response.json();
+                if (data.success && data.themes && data.themes.length > 0) {
+                    themeSelect.style.display = 'inline-block';
+                    data.themes.forEach(theme => {
+                        const opt = document.createElement('option');
+                        opt.value = theme;
+                        opt.textContent = theme;
+                        themeSelect.appendChild(opt);
+                    });
+                    themeSelect.disabled = false;
+                } else {
+                    themeSelect.style.display = 'none';
+                    subthemeSelect.style.display = 'none';
+                }
+            } catch(e) {
+                console.error("Error fetching themes", e);
+            }
+        }
+
+        async function updateSubThemeFilterDropdown() {
+            const subject = document.getElementById('qb-subject-filter').value;
+            const theme = document.getElementById('qb-theme-filter').value;
+            const subthemeSelect = document.getElementById('qb-subtheme-filter');
+            
+            if (!subthemeSelect) return;
+            
+            subthemeSelect.innerHTML = '<option value="">كل الجزئيات</option>';
+            
+            if (!subject || !theme) {
+                subthemeSelect.disabled = true;
+                subthemeSelect.style.display = 'none';
+                return;
+            }
+            
+            subthemeSelect.disabled = true;
+            try {
+                const response = await fetch('/admin/get-themes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: state.userId, subject: subject, theme: theme })
+                });
+                const data = await response.json();
+                if (data.success && data.sub_themes && data.sub_themes.length > 0) {
+                    subthemeSelect.style.display = 'inline-block';
+                    data.sub_themes.forEach(sub => {
+                        const opt = document.createElement('option');
+                        opt.value = sub;
+                        opt.textContent = sub;
+                        subthemeSelect.appendChild(opt);
+                    });
+                    subthemeSelect.disabled = false;
+                } else {
+                    subthemeSelect.style.display = 'none';
+                }
+            } catch(e) {
+                console.error("Error fetching sub themes", e);
+            }
+        }
+
         function updateLessonFilterDropdown() {
 
             const subject = document.getElementById('qb-subject-filter').value;
@@ -8265,65 +8349,46 @@ window.addEventListener('unhandledrejection', function(e) {
         }
 
         function switchQbViewMode(mode) {
-
             state.qbViewMode = mode;
-
             
-
             document.querySelectorAll('.view-switcher-group .btn').forEach(btn => btn.classList.remove('active'));
-
             const activeBtn = document.getElementById(`btn-qb-view-${mode}`);
-
             if (activeBtn) activeBtn.classList.add('active');
-
             
-
             document.getElementById('qb-grid-view').style.display = mode === 'grid' ? 'block' : 'none';
-
-            document.getElementById('qb-table-view').style.display = mode === 'table' ? 'block' : 'none';
-
+            document.getElementById('qb-table-view').style.display = (mode === 'table' || mode === 'panoramic') ? 'block' : 'none';
             document.getElementById('qb-roadmap-view').style.display = mode === 'roadmap' ? 'block' : 'none';
-
             
-
-            if (mode === 'table') {
-
-                const subjFilter = document.getElementById('qb-subject-filter');
-
-                if (subjFilter) {
-
-                    if (state.selectedQbSubject === 'aqida') {
-
-                        subjFilter.value = 'aqeeda';
-
-                    } else {
-
-                        subjFilter.value = state.selectedQbSubject;
-
-                    }
-
-                    updateLessonFilterDropdown();
-
-                }
-
-                loadQuestions(1);
-
-            } else {
-
-                if (state.questionsStats) {
-
-                    renderQuestionsGrid();
-
-                    renderQuestionsRoadmap();
-
-                } else {
-
-                    loadQuestionsStats();
-
-                }
-
+            const panoramicView = document.getElementById('qb-panoramic-view');
+            if (panoramicView) {
+                panoramicView.style.display = mode === 'panoramic' ? 'block' : 'none';
             }
-
+            
+            const tableContainer = document.querySelector('.table-container');
+            if (tableContainer) {
+                tableContainer.style.display = mode === 'panoramic' ? 'none' : 'block';
+            }
+            
+            if (mode === 'table' || mode === 'panoramic') {
+                const subjFilter = document.getElementById('qb-subject-filter');
+                if (subjFilter) {
+                    if (state.selectedQbSubject === 'aqida') {
+                        subjFilter.value = 'aqeeda';
+                    } else {
+                        subjFilter.value = state.selectedQbSubject;
+                    }
+                    updateLessonFilterDropdown();
+                    updateThemeFilterDropdown();
+                }
+                loadQuestions(1);
+            } else {
+                if (state.questionsStats) {
+                    if (mode === 'grid') renderQuestionsGrid();
+                    if (mode === 'roadmap') renderQuestionsRoadmap();
+                } else {
+                    loadQuestionsStats();
+                }
+            }
         }
 
         
@@ -8401,23 +8466,24 @@ window.addEventListener('unhandledrejection', function(e) {
             const source = document.getElementById('qb-source-filter').value;
 
             const search = document.getElementById('qb-search-input').value;
-
             const chapterIdx = document.getElementById('qb-chapter-filter') ? document.getElementById('qb-chapter-filter').value : '';
+            const theme = document.getElementById('qb-theme-filter') ? document.getElementById('qb-theme-filter').value : '';
+            const sub_theme = document.getElementById('qb-subtheme-filter') ? document.getElementById('qb-subtheme-filter').value : '';
 
             const tbody = document.getElementById('questions-table-body');
+            const panoramicContainer = document.getElementById('qb-panoramic-container');
 
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 40px;">جاري تحميل الأسئلة... ⏳</td></tr>';
+            if (state.qbViewMode === 'table' && tbody) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 40px;">جاري تحميل الأسئلة... ⏳</td></tr>';
+            } else if (state.qbViewMode === 'panoramic' && panoramicContainer) {
+                panoramicContainer.innerHTML = '<div style="text-align:center; padding: 40px;">جاري تحميل الأسئلة... ⏳</div>';
+            }
 
             try {
-
                 const response = await fetch('/admin/questions-list', {
-
                     method: 'POST',
-
                     headers: { 'Content-Type': 'application/json' },
-
-                    body: JSON.stringify({ userId: state.userId, page, per_page: 50, subject, lessonNum, source, search, chapterIdx })
-
+                    body: JSON.stringify({ userId: state.userId, page, per_page: state.qbViewMode === 'panoramic' ? 100 : 50, subject, lessonNum, source, search, chapterIdx, theme, sub_theme })
                 });
 
                 const data = await response.json();
@@ -8425,11 +8491,12 @@ window.addEventListener('unhandledrejection', function(e) {
                 
 
                 if (data.success) {
-
                     currentQuestionBank = data.questions;
-
-                    renderQuestions(data.questions);
-
+                    if (state.qbViewMode === 'panoramic') {
+                        renderQuestionsPanoramic(data.questions);
+                    } else {
+                        renderQuestions(data.questions);
+                    }
                     renderQuestionsPagination(data.pagination);
 
                 } else {
@@ -8721,6 +8788,99 @@ window.addEventListener('unhandledrejection', function(e) {
             if (selectAllCheck) selectAllCheck.checked = false;
             updateBulkDeleteButton();
 
+        }
+
+        function renderQuestionsPanoramic(questions) {
+            const container = document.getElementById('qb-panoramic-container');
+            if (!container) return;
+            
+            if (!questions || questions.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="text-align:center; padding: 40px; color: var(--text-secondary);">لا توجد أسئلة تطابق الفلاتر الحالية.</div>';
+                return;
+            }
+
+            // Group by sub_theme
+            const groups = {};
+            questions.forEach(q => {
+                const sub = q.sub_theme || "بدون جزئية";
+                if (!groups[sub]) groups[sub] = [];
+                groups[sub].push(q);
+            });
+
+            container.innerHTML = '';
+            
+            Object.keys(groups).sort().forEach(sub => {
+                const groupDiv = document.createElement('div');
+                groupDiv.style.marginBottom = '32px';
+                
+                const groupTitle = document.createElement('h3');
+                groupTitle.textContent = `📌 ${sub} (${groups[sub].length})`;
+                groupTitle.style.borderBottom = '2px solid var(--primary)';
+                groupTitle.style.paddingBottom = '8px';
+                groupTitle.style.marginBottom = '16px';
+                groupTitle.style.color = 'var(--text)';
+                
+                const cardsGrid = document.createElement('div');
+                cardsGrid.style.display = 'grid';
+                cardsGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(300px, 1fr))';
+                cardsGrid.style.gap = '16px';
+                
+                groups[sub].forEach(q => {
+                    const card = document.createElement('div');
+                    card.style.backgroundColor = 'var(--surface)';
+                    card.style.border = '1px solid var(--border)';
+                    card.style.borderRadius = 'var(--radius-md)';
+                    card.style.padding = '16px';
+                    card.style.position = 'relative';
+                    card.style.boxShadow = 'var(--shadow-sm)';
+                    card.style.display = 'flex';
+                    card.style.flexDirection = 'column';
+                    card.style.gap = '12px';
+                    
+                    let srcBadge = '';
+                    if (q.source === 'official') srcBadge = '<span class="status-badge" style="background:var(--success); color:white; padding:2px 6px; border-radius:4px; font-size:0.75rem;">رسمي</span>';
+                    else if (q.source === 'student_proposal') srcBadge = '<span class="status-badge" style="background:var(--warning); color:black; padding:2px 6px; border-radius:4px; font-size:0.75rem;">طالب</span>';
+                    else if (q.source === 'ai_generated' || q.source === 'generated_by_gemini') srcBadge = '<span class="status-badge" style="background:var(--secondary); color:white; padding:2px 6px; border-radius:4px; font-size:0.75rem;">AI</span>';
+                    
+                    // Question text
+                    let html = `<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                        <div style="font-weight:bold; font-size:1.1rem; color:var(--primary); line-height:1.4;">${q.question}</div>
+                        <div>${srcBadge}</div>
+                    </div>`;
+                    
+                    // Choices
+                    const choices = ['a', 'b', 'c', 'd'];
+                    const letters = ['أ', 'ب', 'ج', 'د'];
+                    
+                    const choicesHtml = choices.map((c, i) => {
+                        const choiceText = q[`choice_${c}`];
+                        if (!choiceText) return '';
+                        const isCorrect = q.correct_answer === c;
+                        const bg = isCorrect ? 'var(--success-light)' : 'transparent';
+                        const border = isCorrect ? '1px solid var(--success)' : '1px solid var(--border)';
+                        const color = isCorrect ? 'var(--success)' : 'var(--text-secondary)';
+                        const weight = isCorrect ? 'bold' : 'normal';
+                        return `<div style="padding: 6px 10px; border-radius: 4px; background-color: ${bg}; border: ${border}; color: ${color}; font-weight: ${weight}; font-size: 0.95rem; display: flex; gap: 8px;">
+                            <span>${letters[i]}.</span> <span>${choiceText}</span>
+                        </div>`;
+                    }).join('');
+                    
+                    html += `<div style="display:flex; flex-direction:column; gap:6px;">${choicesHtml}</div>`;
+                    
+                    // Actions
+                    html += `<div style="margin-top:auto; padding-top:12px; border-top:1px dashed var(--border); display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-size:0.8rem; color:var(--text-secondary);">ID: ${q.id}</span>
+                        <button class="btn btn-secondary btn-sm" onclick="editQuestion(${q.id})">✏️ تعديل</button>
+                    </div>`;
+                    
+                    card.innerHTML = html;
+                    cardsGrid.appendChild(card);
+                });
+                
+                groupDiv.appendChild(groupTitle);
+                groupDiv.appendChild(cardsGrid);
+                container.appendChild(groupDiv);
+            });
         }
 
         function renderQuestionsPagination(pagination) {

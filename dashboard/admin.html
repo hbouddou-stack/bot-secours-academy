@@ -416,6 +416,8 @@
 
                     <button class="btn btn-secondary" id="btn-qb-view-grid" onclick="switchQbViewMode('grid')">🎴 عرض الشبكة</button>
 
+                    <button class="btn btn-secondary" id="btn-qb-view-panoramic" onclick="switchQbViewMode('panoramic')">🖼️ عرض بانورامي</button>
+
                     <button class="btn btn-secondary" id="btn-qb-view-table" onclick="switchQbViewMode('table')">📋 جدول الأسئلة</button>
 
                     <button class="btn btn-secondary" id="btn-qb-view-roadmap" onclick="switchQbViewMode('roadmap')">🗺️ خارطة المنهج</button>
@@ -491,6 +493,18 @@
                         <select id="qb-chapter-filter" class="form-select" onchange="loadQuestions(1)" style="min-width: 150px;" disabled>
 
                             <option value="">كل المحاور</option>
+
+                        </select>
+
+                        <select id="qb-theme-filter" class="form-select" onchange="updateSubThemeFilterDropdown(); loadQuestions(1);" style="min-width: 150px; display: none;">
+
+                            <option value="">كل المحاور الكبرى</option>
+
+                        </select>
+
+                        <select id="qb-subtheme-filter" class="form-select" onchange="loadQuestions(1)" style="min-width: 150px; display: none;">
+
+                            <option value="">كل الجزئيات</option>
 
                         </select>
 
@@ -574,6 +588,16 @@
 
                     </div>
 
+                </div>
+
+                <!-- Vue Panoramique (Panoramic View) -->
+                <div id="qb-panoramic-view" style="display: none;">
+                    <div style="background-color: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 16px; box-shadow: var(--shadow);">
+                        <span style="font-size: 0.9rem; color: var(--text-secondary);">💡 يتم تجميع الأسئلة حسب الجزئيات الفرعية لتسهيل اكتشاف التكرار.</span>
+                    </div>
+                    <div id="qb-panoramic-container">
+                        <!-- Rempli par javascript -->
+                    </div>
                 </div>
 
             </div>
