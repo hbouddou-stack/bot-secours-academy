@@ -315,12 +315,12 @@ def get_themes_grid_keyboard(subject: str, selected_themes: list[str] = None, av
     rows = []
     row = []
     if available_themes:
-        for th in available_themes:
+        for idx, th in enumerate(available_themes):
             if th in hidden_themes:
                 continue
             row.append(InlineKeyboardButton(
                 text=th,
-                callback_data=f"select_th:{th}"
+                callback_data=f"select_th:{idx}"
             ))
             if len(row) == 2:
                 rows.append(row)
@@ -351,12 +351,12 @@ def get_sub_themes_grid_keyboard(subject: str, selected_sub_themes: list[str], a
     row = []
     
     if available_sub_themes:
-        for subth in available_sub_themes:
+        for idx, subth in enumerate(available_sub_themes):
             is_selected = subth in selected_sub_themes
             check_char = "✅" if is_selected else "⬜"
             row.append(InlineKeyboardButton(
                 text=f"{check_char} {subth}",
-                callback_data=f"tog_subth:{subth}"
+                callback_data=f"tog_subth:{idx}"
             ))
             if len(row) == 2:
                 rows.append(row)

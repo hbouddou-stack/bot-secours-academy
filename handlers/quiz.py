@@ -206,6 +206,9 @@ async def render_themes_grid(callback: CallbackQuery, state: FSMContext, subject
     elif subject == "nahw":
         available_themes = await db.get_available_nahw_themes()
         
+    if available_themes is not None:
+        await state.update_data(available_themes=available_themes)
+        
     await callback.message.edit_text(
         f"🎯 <b>مادة {subject_ar} - اختيار المحاور:</b>\n\n"
         "<i>حدد المحاور الدراسية التي تريد التمرّن عليها:</i>",
@@ -476,10 +479,21 @@ async def handle_lessons_back(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(QuizStates.selecting_themes, F.data.startswith("select_th:"))
 async def handle_select_theme(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    theme = callback.data.split(":")[1]
+    theme_val = callback.data.split(":")[1]
     data = await state.get_data()
     subject = data.get("subject")
     
+    if theme_val.isdigit():
+        available_themes = data.get("available_themes", [])
+        idx = int(theme_val)
+        if 0 <= idx < len(available_themes):
+            theme = available_themes[idx]
+        else:
+            await callback.message.answer("⚠️ حدث خطأ في اختيار المحور.")
+            return
+    else:
+        theme = theme_val
+        
     # Store selected theme and reset sub-themes selection
     await state.update_data(selected_theme=theme, selected_sub_themes=[])
     
@@ -516,8 +530,20 @@ async def render_sub_themes_grid(callback: CallbackQuery, state: FSMContext, sub
 @router.callback_query(QuizStates.selecting_sub_themes, F.data.startswith("tog_subth:"))
 async def handle_toggle_sub_theme(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    subth = callback.data.split(":")[1]
+    subth_val = callback.data.split(":")[1]
     data = await state.get_data()
+    
+    if subth_val.isdigit():
+        available_sub_themes = data.get("available_sub_themes", [])
+        idx = int(subth_val)
+        if 0 <= idx < len(available_sub_themes):
+            subth = available_sub_themes[idx]
+        else:
+            await callback.message.answer("⚠️ حدث خطأ.")
+            return
+    else:
+        subth = subth_val
+        
     subject = data.get("subject")
     theme = data.get("selected_theme")
     selected = data.get("selected_sub_themes", [])
