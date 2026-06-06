@@ -492,6 +492,7 @@ async def handle_register_year(callback: CallbackQuery, state: FSMContext):
     if year_str != "skip":
         await db.update_user_academic_year(user_id, int(year_str))
         await callback.answer("✅ تم حفظ السنة الدراسية بنجاح.")
+    else:
         await callback.answer("⏭️ تم تخطي تحديد السنة الدراسية.")
         
     await start_preferred_subject_selection(callback, state, is_editing=False)
