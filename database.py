@@ -798,17 +798,48 @@ async def delete_user_data(telegram_id: int) -> None:
 
 async def get_user_preferred_subject(telegram_id: int) -> str:
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        async with db.execute("SELECT preferred_subject FROM users WHERE telegram_id = ?", (telegram_id,)) as cursor:
-            row = await cursor.fetchone()
-            return row[0] if row and row[0] else None
+        try:
+            async with db.execute("SELECT preferred_subject FROM users WHERE telegram_id = ?", (telegram_id,)) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row and row[0] else None
+        except aiosqlite.OperationalError as e:
+            if "no such column: preferred_subject" in str(e):
+                logger.warning("Column 'preferred_subject' missing in 'users' table. Migrating dynamically...")
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN preferred_subject TEXT DEFAULT NULL;")
+                    await db.commit()
+                    # Retry query
+                    async with db.execute("SELECT preferred_subject FROM users WHERE telegram_id = ?", (telegram_id,)) as cursor:
+                        row = await cursor.fetchone()
+                        return row[0] if row and row[0] else None
+                except Exception as ex:
+                    logger.error(f"Failed to add column preferred_subject: {ex}")
+            raise e
 
 async def update_user_preferred_subject(telegram_id: int, subject: str) -> None:
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute(
-            "UPDATE users SET preferred_subject = ? WHERE telegram_id = ?",
-            (subject, telegram_id)
-        )
-        await db.commit()
+        try:
+            await db.execute(
+                "UPDATE users SET preferred_subject = ? WHERE telegram_id = ?",
+                (subject, telegram_id)
+            )
+            await db.commit()
+        except aiosqlite.OperationalError as e:
+            if "no such column: preferred_subject" in str(e):
+                logger.warning("Column 'preferred_subject' missing in 'users' table on update. Migrating dynamically...")
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN preferred_subject TEXT DEFAULT NULL;")
+                    await db.commit()
+                    # Retry update
+                    await db.execute(
+                        "UPDATE users SET preferred_subject = ? WHERE telegram_id = ?",
+                        (subject, telegram_id)
+                    )
+                    await db.commit()
+                    return
+                except Exception as ex:
+                    logger.error(f"Failed to add column preferred_subject on update: {ex}")
+            raise e
 
 # --- Course Metadata ---
 
