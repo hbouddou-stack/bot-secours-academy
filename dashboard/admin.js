@@ -512,11 +512,11 @@ window.addEventListener('unhandledrejection', function(e) {
 
             try {
 
-                // Check URL parameters for adminId bypass
+                // Check URL parameters for state.userId bypass
 
                 const urlParams = new URLSearchParams(window.location.search);
 
-                const urlAdminId = urlParams.get('adminId');
+                const urlAdminId = urlParams.get('state.userId');
 
                 if (urlAdminId) {
 
@@ -8014,182 +8014,130 @@ window.addEventListener('unhandledrejection', function(e) {
 
         }
 
-        function showCourseThematics(courseNum) {
-
+        async function showCourseThematics(courseNum) {
             state.selectedQbCourse = courseNum;
-
             const detailContainer = document.getElementById('qb-course-thematic-detail');
-
             const backdrop = document.getElementById('qb-thematic-drawer-backdrop');
-
             
-
             const stats = state.questionsStats;
-
             if (!stats) return;
-
             
-
             const selectedSubject = state.selectedQbSubject;
-
             const courseData = (stats[selectedSubject] || {})[courseNum];
-
             if (!courseData) return;
-
             
-
             if (backdrop) backdrop.classList.add('show');
-
-            if (detailContainer) detailContainer.classList.add('open');
-
+            if (detailContainer) {
+                detailContainer.classList.add('open');
+                detailContainer.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">جاري تحميل الأسئلة (Lecture Rapide)... ⏳</div>';
+            }
             
-
-            let html = `
-
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:16px;">
-
-                    <div>
-
-                        <h2 style="margin:0; font-size:1.2rem; color: var(--text-primary);">📚 التغطية الموضوعية للدرس ${courseNum}</h2>
-
-                        <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">${SUBJECTS_AR[selectedSubject]}</div>
-
-                    </div>
-
-                    <button class="btn btn-secondary" onclick="closeQbThematicDrawer()" style="padding: 6px 12px; height: auto;">✖ إغلاق</button>
-
-                </div>
-
-                <div class="qb-thematics-list" style="display: flex; flex-direction: column; gap: 12px;">
-
-            `;
-
-            
-
-            const chapters = courseData.chapters || [];
-
-            if (chapters.length === 0) {
-
-                html += `<div style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد محاور تفريغ مسجلة لهذا الدرس بعد.</div>`;
-
-            } else {
-
-                chapters.forEach(ch => {
-
-                    const getPill = (label, count, colorClass, sourceKey) => {
-
-                        const isZero = count === 0;
-
-                        const style = isZero 
-
-                            ? 'background: rgba(239, 68, 68, 0.05); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.15); opacity: 0.6;' 
-
-                            : '';
-
-                            
-
-                        let extraButton = '';
-
-                        if (sourceKey === 'ai_generated') {
-
-                            extraButton = `<button class="btn btn-primary btn-3d" style="padding: 2px 6px; font-size: 0.68rem; height: auto; font-weight: bold; margin-right: 8px;" onclick="openAiGenerateModal('${selectedSubject}', ${courseNum}, ${ch.chapter_index - 1}, '${escapeHtml(ch.title).replace(/'/g, "\\'")}')">🪄 توليد</button>`;
-
-                        }
-
-                        
-
-                        // Extract emoji and text from label
-
-                        let emoji = '';
-
-                        let text = label;
-
-                        const match = label.match(/^([^\w\s\u0600-\u06FF]+)\s+(.+)$/u);
-
-                        if (match) {
-
-                            emoji = match[1];
-
-                            text = match[2];
-
-                        }
-
-                        
-
-                        return `
-
-                            <div class="qb-card-source-row ${colorClass}" style="${style}" onclick="filterQuestionsBySource('${selectedSubject}', ${courseNum}, '${sourceKey}', ${ch.chapter_index}); event.stopPropagation();">
-
-                                <span class="qb-card-source-emoji">${emoji}</span>
-
-                                <span class="qb-card-source-text">${text}</span>
-
-                                <div style="display:flex; align-items:center; gap:6px;">
-
-                                    <span class="qb-card-source-count">${count}</span>
-
-                                    ${extraButton}
-
-                                </div>
-
-                            </div>
-
-                        `;
-
-                    };
-
-                    
-
-                    const emptyWarning = ch.count === 0 
-
-                        ? `<div style="color: #ef4444; font-size: 0.72rem; font-weight: bold; background: rgba(239, 68, 68, 0.08); padding: 4px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;">⚠️ منطقة بيضاء (المحور يفتقر تماماً للأسئلة)</div>`
-
-                        : '';
-
-                    
-
-                    html += `
-
-                        <div class="qb-thematic-item" style="flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); ${ch.count === 0 ? 'border-right: 3px solid #ef4444; background: rgba(239, 68, 68, 0.03);' : 'border-right: 3px solid ' + (SUBJECT_COLORS[selectedSubject] || 'var(--border)') + '; background: var(--bg);'}">
-
-                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-
-                                <span class="qb-thematic-title" style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);">المحور ${ch.chapter_index}: ${escapeHtml(ch.title)}</span>
-
-                                <span class="badge" style="background: var(--surface-hover); color: var(--text-primary); border: 1px solid var(--border); font-size: 0.75rem; font-weight: 700;">${ch.count} أسئلة</span>
-
-                            </div>
-
-                            
-
-                            ${emptyWarning}
-
-                            
-
-                            <div class="qb-card-sources-list" style="margin-top: 4px; border-top: none; padding-top: 0;">
-
-                                ${getPill('🎓 رسمي', ch.official || 0, 'qb-source-official', 'official')}
-
-                                ${getPill('💡 مقترح', ch.student_proposal || 0, 'qb-source-proposal', 'student_proposal')}
-
-                                ${getPill('🪄 ذكاء', ch.ai_generated || 0, 'qb-source-ai', 'ai_generated')}
-
-                            </div>
-
-                        </div>
-
-                    `;
-
+            let questions = [];
+            try {
+                const response = await fetch('/admin/questions-list', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: state.userId, page: 1, per_page: 500, subject: selectedSubject, lessonNum: courseNum })
                 });
-
+                const data = await response.json();
+                if (data.success) {
+                    questions = data.questions;
+                }
+            } catch (err) {
+                console.error("Failed to load questions for rapid read mode", err);
             }
 
+            let html = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:16px;">
+                    <div>
+                        <h2 style="margin:0; font-size:1.2rem; color: var(--text-primary);">📚 التغطية الموضوعية للدرس ${courseNum} (Lecture Rapide)</h2>
+                        <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">${SUBJECTS_AR[selectedSubject]}</div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="closeQbThematicDrawer()" style="padding: 6px 12px; height: auto;">✖ إغلاق</button>
+                </div>
+                <div class="qb-thematics-list" style="display: flex; flex-direction: column; gap: 16px;">
+            `;
             
+            const chapters = courseData.chapters || [];
+            if (chapters.length === 0 && questions.length === 0) {
+                html += `<div style="text-align: center; color: var(--text-secondary); padding: 20px;">لا توجد محاور أو أسئلة مسجلة لهذا الدرس بعد.</div>`;
+            } else {
+                chapters.forEach(ch => {
+                    const emptyWarning = ch.count === 0 
+                        ? `<div style="color: #ef4444; font-size: 0.72rem; font-weight: bold; background: rgba(239, 68, 68, 0.08); padding: 4px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;">⚠️ منطقة بيضاء (المحور يفتقر تماماً للأسئلة)</div>`
+                        : '';
+                    
+                    html += `
+                        <div class="qb-thematic-item" style="flex-direction: column; align-items: stretch; gap: 8px; padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); ${ch.count === 0 ? 'border-right: 4px solid #ef4444; background: rgba(239, 68, 68, 0.03);' : 'border-right: 4px solid ' + (SUBJECT_COLORS[selectedSubject] || 'var(--border)') + '; background: var(--bg);'}">
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <span class="qb-thematic-title" style="font-size: 1rem; font-weight: 700; color: var(--text-primary);">المحور ${ch.chapter_index}: ${escapeHtml(ch.title)}</span>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="badge" style="background: var(--surface-hover); color: var(--text-primary); border: 1px solid var(--border); font-size: 0.75rem; font-weight: 700;">${ch.count} أسئلة</span>
+                                    <button class="btn btn-primary btn-3d" style="padding: 2px 6px; font-size: 0.68rem; height: auto; font-weight: bold;" onclick="openAiGenerateModal('${selectedSubject}', ${courseNum}, ${ch.chapter_index - 1}, '${escapeHtml(ch.title).replace(/'/g, "\\'")}')">🪄 توليد ذكاء</button>
+                                </div>
+                            </div>
+                            ${emptyWarning}
+                    `;
+
+                    const chQuestions = questions.filter(q => String(q.chapter_index) === String(ch.chapter_index));
+                    if (chQuestions.length > 0) {
+                        html += `<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">`;
+                        chQuestions.forEach(q => {
+                            const sourceClass = q.source === 'IA' ? 'source-ai' : (q.source === 'USER' ? 'source-user' : 'source-official');
+                            html += `
+                                <div class="draggable-question ${sourceClass}" style="background: var(--surface-hover); border: 1px solid var(--border);">
+                                    <div class="draggable-question-header" style="justify-content: space-between;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span class="question-id-badge" style="position: static; font-size: 0.7rem;">#${q.id}</span>
+                                            <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: bold;">
+                                                ${q.source === 'IA' ? '🪄 ذكاء اصطناعي' : (q.source === 'USER' ? '💡 مقترح' : '🎓 رسمي')}
+                                            </span>
+                                        </div>
+                                        <button class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 4px 8px;" onclick="openQuestionDrawer(${q.id})">✏️ Détails</button>
+                                    </div>
+                                    <div class="draggable-question-text" style="margin-top: 8px; font-size: 0.95rem;">${q.question || 'بدون نص'}</div>
+                                </div>
+                            `;
+                        });
+                        html += `</div>`;
+                    }
+                    html += `</div>`;
+                });
+            }
+            
+            // Show unmapped questions
+            const unmappedQuestions = questions.filter(q => q.chapter_index === null || q.chapter_index === undefined || q.chapter_index === '');
+            if (unmappedQuestions.length > 0) {
+                html += `
+                    <div class="qb-thematic-item" style="flex-direction: column; align-items: stretch; gap: 8px; padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); border-right: 4px solid var(--text-secondary); background: var(--bg);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <span class="qb-thematic-title" style="font-size: 1rem; font-weight: 700; color: var(--text-secondary);">أسئلة غير مصنفة بمحور</span>
+                            <span class="badge" style="background: var(--surface-hover); color: var(--text-primary); border: 1px solid var(--border); font-size: 0.75rem; font-weight: 700;">${unmappedQuestions.length} أسئلة</span>
+                        </div>
+                        <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+                `;
+                unmappedQuestions.forEach(q => {
+                    const sourceClass = q.source === 'IA' ? 'source-ai' : (q.source === 'USER' ? 'source-user' : 'source-official');
+                    html += `
+                        <div class="draggable-question ${sourceClass}" style="background: var(--surface-hover); border: 1px solid var(--border);">
+                            <div class="draggable-question-header" style="justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="question-id-badge" style="position: static; font-size: 0.7rem;">#${q.id}</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: bold;">
+                                        ${q.source === 'IA' ? '🪄 ذكاء اصطناعي' : (q.source === 'USER' ? '💡 مقترح' : '🎓 رسمي')}
+                                    </span>
+                                </div>
+                                <button class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 4px 8px;" onclick="openQuestionDrawer(${q.id})">✏️ Détails</button>
+                            </div>
+                            <div class="draggable-question-text" style="margin-top: 8px; font-size: 0.95rem;">${q.question || 'بدون نص'}</div>
+                        </div>
+                    `;
+                });
+                html += `</div></div>`;
+            }
 
             html += `</div>`;
-
-            detailContainer.innerHTML = html;
-
+            if (detailContainer) detailContainer.innerHTML = html;
         }
 
         function renderQuestionsRoadmap() {
@@ -8832,26 +8780,31 @@ window.addEventListener('unhandledrejection', function(e) {
                 
                 groups[sub].forEach(q => {
                     const card = document.createElement('div');
+                    
+                    const sourceMap = {
+                        'official': 'source-official',
+                        'student_proposal': 'source-user',
+                        'USER': 'source-user',
+                        'ai_generated': 'source-ai',
+                        'generated_by_gemini': 'source-ai',
+                        'IA': 'source-ai'
+                    };
+                    const sourceClass = sourceMap[q.source] || 'source-official';
+                    
+                    card.className = `draggable-question ${sourceClass}`;
                     card.style.backgroundColor = 'var(--surface)';
-                    card.style.border = '1px solid var(--border)';
-                    card.style.borderRadius = 'var(--radius-md)';
-                    card.style.padding = '16px';
-                    card.style.position = 'relative';
-                    card.style.boxShadow = 'var(--shadow-sm)';
-                    card.style.display = 'flex';
-                    card.style.flexDirection = 'column';
-                    card.style.gap = '12px';
                     
                     let srcBadge = '';
-                    if (q.source === 'official') srcBadge = '<span class="status-badge" style="background:var(--success); color:white; padding:2px 6px; border-radius:4px; font-size:0.75rem;">رسمي</span>';
-                    else if (q.source === 'student_proposal') srcBadge = '<span class="status-badge" style="background:var(--warning); color:black; padding:2px 6px; border-radius:4px; font-size:0.75rem;">طالب</span>';
-                    else if (q.source === 'ai_generated' || q.source === 'generated_by_gemini') srcBadge = '<span class="status-badge" style="background:var(--secondary); color:white; padding:2px 6px; border-radius:4px; font-size:0.75rem;">AI</span>';
+                    if (sourceClass === 'source-official') srcBadge = '<span class="status-badge" style="background:#28a745; color:white; padding:2px 6px; border-radius:4px; font-size:0.75rem;">🎓 رسمي</span>';
+                    else if (sourceClass === 'source-user') srcBadge = '<span class="status-badge" style="background:#fd7e14; color:white; padding:2px 6px; border-radius:4px; font-size:0.75rem;">💡 مقترح</span>';
+                    else if (sourceClass === 'source-ai') srcBadge = '<span class="status-badge" style="background:#17a2b8; color:white; padding:2px 6px; border-radius:4px; font-size:0.75rem;">🪄 ذكاء</span>';
                     
                     // Question text
-                    let html = `<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                        <div style="font-weight:bold; font-size:1.1rem; color:var(--primary); line-height:1.4;">${q.question}</div>
+                    let html = `<div class="draggable-question-header" style="justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                        <span class="question-id-badge" style="position:static; font-size:0.75rem; margin-left:8px;">#${q.id}</span>
                         <div>${srcBadge}</div>
-                    </div>`;
+                    </div>
+                    <div class="draggable-question-text" style="font-weight:bold; font-size:1.05rem; color:var(--primary); line-height:1.4; margin-bottom:12px;">${q.question || 'بدون نص'}</div>`;
                     
                     // Choices
                     const choices = ['a', 'b', 'c', 'd'];
@@ -8873,9 +8826,8 @@ window.addEventListener('unhandledrejection', function(e) {
                     html += `<div style="display:flex; flex-direction:column; gap:6px;">${choicesHtml}</div>`;
                     
                     // Actions
-                    html += `<div style="margin-top:auto; padding-top:12px; border-top:1px dashed var(--border); display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size:0.8rem; color:var(--text-secondary);">ID: ${q.id}</span>
-                        <button class="btn btn-secondary btn-sm" onclick="editQuestion(${q.id})">✏️ تعديل</button>
+                    html += `<div style="margin-top:auto; padding-top:12px; border-top:1px dashed var(--border); display:flex; justify-content:flex-end; align-items:center;">
+                        <button class="btn btn-secondary btn-sm" onclick="openQuestionDrawer(${q.id})">✏️ Détails</button>
                     </div>`;
                     
                     card.innerHTML = html;
@@ -9530,7 +9482,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
                     body: JSON.stringify({
 
-                        userId:    state.adminId,
+                        userId:    state.state.userId,
 
                         subject:   transcriptEditorLesson.subject,
 
@@ -11830,6 +11782,8 @@ window.addEventListener('unhandledrejection', function(e) {
             }
         };
 
+        
+
         window.moveSelectionToPrev = function() {
             const txtArea = document.getElementById('axis-transcription-editor');
             if (!txtArea || !currentAxesEditing) return;
@@ -12127,3 +12081,472 @@ window.addEventListener('unhandledrejection', function(e) {
 
 
     
+
+// --- Curriculum Mapping (Miller Columns) ---
+let curriculumData = { programs: [], nodes: [], unassigned_questions: [] };
+let selectedPath = { 1: null, 2: null, 3: null, 4: null };
+
+
+async function toggleNodeVisibility(nodeId) {
+    try {
+        const response = await fetch('/admin/curriculum/toggle-visibility', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: state.userId, node_id: nodeId })
+        });
+        const data = await response.json();
+        if (data.success) {
+            loadAdminThematics();
+        } else {
+            alert('خطأ: ' + data.error);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('حدث خطأ أثناء الاتصال بالخادم.');
+    }
+}
+
+function selectCurriculumNode(level, id) {
+    selectedPath[level] = id;
+    const maxKeys = Math.max(...Object.keys(selectedPath).map(Number), level);
+    for (let l = level + 1; l <= maxKeys; l++) {
+        delete selectedPath[l];
+    }
+    renderCurriculum();
+}
+
+async function loadAdminThematics() {
+    const subject = document.getElementById('curriculum-subject-filter').value;
+    const yearEl = document.getElementById('curriculum-year-filter');
+    const year = yearEl ? yearEl.value : '';
+    
+    const container = document.getElementById('miller-columns-container');
+    if (container) {
+        container.className = 'miller-columns-container';
+    }
+    
+    try {
+        const response = await fetch('/admin/thematics', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: state.userId, subject: subject, academic_year: year })
+        });
+        const data = await response.json();
+        if (data.success) {
+            curriculumData = data;
+            selectedPath = {};
+            renderCurriculum();
+        } else {
+            console.error("Failed to load thematics:", data.error);
+        }
+    } catch (e) {
+        console.error("Error loading thematics:", e);
+    }
+}
+
+function renderCurriculum() {
+    const container = document.getElementById('miller-columns-container');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    // Level 1: Root Nodes
+    renderMillerColumn(1, null);
+    
+    // Recursively render child columns
+    let level = 1;
+    while(selectedPath[level] != null) {
+        renderMillerColumn(level + 1, selectedPath[level]);
+        level++;
+    }
+    
+    renderMillerInbox();
+}
+
+function renderMillerColumn(level, parentId) {
+    const container = document.getElementById('miller-columns-container');
+    if (!container) return;
+    
+    // Remove any columns >= level
+    const existingCols = container.querySelectorAll('.miller-column');
+    existingCols.forEach(col => {
+        if (parseInt(col.dataset.level) >= level) {
+            col.remove();
+        }
+    });
+
+    let items = [];
+    if (level === 1) {
+        // Level 1: Root nodes
+        items = curriculumData.nodes.filter(n => n.parent_id == null);
+    } else {
+        items = curriculumData.nodes.filter(n => n.parent_id == parentId);
+    }
+
+    if (items.length === 0 && level > 1) return;
+
+    const colDiv = document.createElement('div');
+    colDiv.className = 'miller-column';
+    colDiv.dataset.level = level;
+    
+    const depthTitles = ['المجلدات الرئيسية', 'المجلدات الفرعية', 'المحاور', 'الجزئيات', 'مستوى 5', 'مستوى 6'];
+    const titleHeader = depthTitles[level - 1] || `مستوى ${level}`;
+    
+    let headerHtml = `
+        <div class="miller-column-header">
+            <span>${titleHeader}</span>
+            <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.8rem;" onclick="addCurriculumNode(${level}, ${parentId})">➕</button>
+        </div>
+        <div class="miller-column-body" id="miller-col-body-${level}" ondragover="allowDrop(event)" ondrop="dropQuestionToNode(event, ${level})">
+    `;
+    
+    items.sort((a,b) => {
+        const orderDiff = (a.order_index || 0) - (b.order_index || 0);
+        if (orderDiff !== 0) return orderDiff;
+        const titleA = (a.name || a.title || '').toString();
+        const titleB = (b.name || b.title || '').toString();
+        return titleA.localeCompare(titleB, 'ar');
+    }).forEach(item => {
+        const isSelected = selectedPath[level] === item.id;
+        const title = item.title || item.name;
+        const isHidden = item.is_active === 0;
+        const eyeIcon = isHidden ? '🚫' : '👁️';
+        const opacityStyle = isHidden ? 'opacity: 0.5;' : '';
+        
+        headerHtml += `
+            <div class="miller-item ${isSelected ? 'selected' : ''}" onclick="selectCurriculumNode(${level}, ${item.id})" data-id="${item.id}" style="${opacityStyle}">
+                <span class="miller-item-text">${title}</span>
+                <span class="drag-handle" draggable="true" ondragstart="dragNode(event, ${level}, ${item.id})" ondragover="allowDrop(event)" ondragleave="dragLeaveNode(event)" ondrop="dropNode(event, ${level}, ${item.id})">⋮⋮</span>
+                <div class="miller-item-actions">
+                    <button class="miller-item-btn" title="تبديل الظهور" onclick="event.stopPropagation(); toggleNodeVisibility(${item.id})">${eyeIcon}</button>
+                    <button class="miller-item-btn" title="عرض الأسئلة" onclick="event.stopPropagation(); viewNodeQuestions(${item.id}, '${title.replace(/'/g, "\'")}')">📂</button>
+                    <button class="miller-item-btn" title="تعديل" onclick="event.stopPropagation(); editCurriculumNode(${level}, ${item.id}, '${title.replace(/'/g, "\'")}')">✏️</button>
+                    <button class="miller-item-btn" title="حذف" onclick="event.stopPropagation(); deleteCurriculumNode(${level}, ${item.id})">🗑️</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    headerHtml += '</div>';
+    colDiv.innerHTML = headerHtml;
+    container.appendChild(colDiv);
+    
+    setTimeout(() => {
+        colDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+    }, 100);
+}
+
+function renderMillerInbox() {
+    const list = document.getElementById('miller-inbox-list');
+    list.innerHTML = '';
+    
+    if (!curriculumData.unassigned_questions || curriculumData.unassigned_questions.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color: var(--text-secondary); padding: 20px;">لا يوجد أسئلة غير مصنفة</div>';
+        return;
+    }
+    
+    let htmlContent = '';
+    curriculumData.unassigned_questions.forEach(q => {
+        const title = (q.subject || '') + ' - درس ' + (q.course_number || '?');
+        const text = q.question || 'بدون نص';
+        const sourceClass = q.source === 'IA' ? 'source-ai' : (q.source === 'USER' ? 'source-user' : 'source-official');
+        htmlContent += `
+            <div class="draggable-question ${sourceClass}">
+                <span class="question-id-badge">#${q.id}</span>
+                <div class="draggable-question-header">
+                    <span class="drag-handle" draggable="true" ondragstart="dragQuestion(event, ${q.id})">⋮⋮</span>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">${title}</div>
+                </div>
+                <div class="draggable-question-text">${text}</div>
+            </div>
+        `;
+    });
+    list.innerHTML = htmlContent;
+}
+
+function switchMillerSideTab(tabName) {
+    document.getElementById('miller-side-panel').style.display = 'flex';
+    document.getElementById('btn-show-sidepanel').style.display = 'none';
+
+    document.getElementById('miller-tab-inbox').style.display = 'none';
+    document.getElementById('miller-tab-preview').style.display = 'none';
+    
+    document.getElementById('btn-tab-miller-inbox').classList.remove('btn-primary');
+    document.getElementById('btn-tab-miller-inbox').classList.add('btn-secondary');
+    
+    document.getElementById('btn-tab-miller-preview').classList.remove('btn-primary');
+    document.getElementById('btn-tab-miller-preview').classList.add('btn-secondary');
+    
+    document.getElementById('miller-tab-' + tabName).style.display = 'flex';
+    document.getElementById('btn-tab-miller-' + tabName).classList.remove('btn-secondary');
+    document.getElementById('btn-tab-miller-' + tabName).classList.add('btn-primary');
+}
+
+function dragQuestion(ev, questionId) {
+    ev.dataTransfer.setData("questionId", questionId);
+}
+
+function allowDrop(ev) {
+    ev.preventDefault();
+    ev.currentTarget.classList.add('drag-over');
+}
+
+async function dropQuestionToNode(ev, level) {
+    ev.preventDefault();
+    ev.currentTarget.classList.remove('drag-over');
+    
+    const questionId = ev.dataTransfer.getData("questionId");
+    if (!questionId) return;
+    
+    const nodeId = selectedPath[level];
+    if (!nodeId && level > 1) {
+        alert("الرجاء تحديد عنصر أولاً");
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/thematics/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userId: state.userId, 
+                action: 'assign_question',
+                question_id: parseInt(questionId),
+                node_id: level === 1 ? null : nodeId
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            loadAdminThematics();
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function dropQuestionToInbox(ev) {
+    ev.preventDefault();
+    ev.currentTarget.classList.remove('drag-over');
+    
+    const questionId = ev.dataTransfer.getData("questionId");
+    if (!questionId) return;
+    
+    try {
+        const response = await fetch('/admin/thematics/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userId: state.userId, 
+                action: 'assign_question',
+                question_id: parseInt(questionId),
+                node_id: null
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            loadAdminThematics();
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function addCurriculumNode(level, parentId) {
+    let payload = { userId: state.userId };
+    
+    if (level === 1) {
+        const subject = prompt("رمز المادة (مثال: fiqh):");
+        if (!subject) return;
+        const name = prompt("اسم البرنامج (مثال: الفقه الميسر):");
+        if (!name) return;
+        payload.action = 'add_program';
+        payload.subject = subject;
+        payload.name = name;
+    } else {
+        const title = prompt("عنوان العقدة:");
+        if (!title) return;
+        payload.action = 'add_node';
+        payload.title = title;
+        payload.level = level;
+        if (level === 2) {
+            payload.program_id = parentId;
+            payload.parent_id = null;
+        } else {
+            const parent = curriculumData.nodes.find(n => n.id == parentId);
+            payload.program_id = parent ? parent.program_id : null;
+            payload.parent_id = parentId;
+        }
+    }
+    
+    try {
+        const response = await fetch('/admin/thematics/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (data.success) {
+            loadAdminThematics();
+        } else {
+            alert("خطأ: " + data.error);
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function editCurriculumNode(level, id, oldTitle) {
+    if (level === 1) {
+        alert("تعديل البرامج غير متاح حالياً من الواجهة. يرجى إضافته كبرنامج جديد.");
+        return;
+    }
+    const newTitle = prompt("عنوان العقدة:", oldTitle);
+    if (!newTitle || newTitle === oldTitle) return;
+    
+    try {
+        const response = await fetch('/admin/thematics/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userId: state.userId, 
+                action: 'update_node',
+                node_id: id,
+                title: newTitle
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            loadAdminThematics();
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function deleteCurriculumNode(level, id) {
+    if (!confirm("هل أنت متأكد من الحذف؟ سيتم حذف جميع العقد الفرعية المرتبطة!")) return;
+    
+    if (level === 1) {
+        alert("حذف البرامج غير متاح حالياً للبرامج.");
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/thematics/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userId: state.userId, 
+                action: 'delete_node',
+                node_id: id
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            loadAdminThematics();
+        }
+    } catch(e) { console.error(e); }
+}
+
+// Hook into tab switching to load data
+const originalSwitchTab = window.switchTab;
+window.switchTab = function(tabName) {
+    if (originalSwitchTab) {
+        originalSwitchTab(tabName);
+    }
+    if (tabName === 'curriculum') {
+        loadAdminThematics();
+    }
+};
+
+document.addEventListener('dragleave', (ev) => {
+    if (ev.target.classList && (ev.target.classList.contains('miller-column-body') || ev.target.classList.contains('miller-inbox-list'))) {
+        ev.target.classList.remove('drag-over');
+    }
+});
+
+async function viewNodeQuestions(nodeId, nodeTitle) {
+    switchMillerSideTab('preview');
+    document.getElementById('miller-preview-title').innerText = "الأسئلة المصنفة في: " + nodeTitle;
+    const list = document.getElementById('miller-preview-list');
+    list.innerHTML = '<div style="text-align:center; padding:20px;">جاري التحميل...</div>';
+    
+    try {
+        const response = await fetch('/admin/thematics/node_questions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: state.userId, node_id: nodeId })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            if (!data.questions || data.questions.length === 0) {
+                list.innerHTML = '<div style="text-align:center; color: var(--text-secondary); padding: 20px;">لا يوجد أسئلة مصنفة في هذه العقدة</div>';
+            } else {
+                let html = '';
+                data.questions.forEach(q => {
+                    const text = q.question || 'بدون نص';
+                    const sourceClass = q.source === 'IA' ? 'source-ai' : (q.source === 'USER' ? 'source-user' : 'source-official');
+                    html += `
+                        <div class="draggable-question ${sourceClass}" style="background: var(--surface-hover);">
+                            <span class="question-id-badge">#${q.id}</span>
+                            <div class="draggable-question-header">
+                                <span class="drag-handle" draggable="true" ondragstart="dragQuestion(event, ${q.id})">⋮⋮</span>
+                                <span style="font-size: 0.8rem; color: var(--text-secondary);">${q.subject || ''} - درس ${q.course_number || '?'}</span>
+                            </div>
+                            <div class="draggable-question-text">${text}</div>
+                        </div>
+                    `;
+                });
+                list.innerHTML = html;
+            }
+        } else {
+            list.innerHTML = `<div style="color: red; padding: 20px;">خطأ: ${data.error}</div>`;
+        }
+    } catch (e) {
+        list.innerHTML = `<div style="color: red; padding: 20px;">خطأ في الاتصال</div>`;
+    }
+}
+
+
+function dragNode(ev, level, nodeId) {
+    ev.dataTransfer.setData("nodeId", nodeId);
+    ev.dataTransfer.setData("nodeLevel", level);
+    ev.dataTransfer.effectAllowed = "move";
+}
+
+function dragLeaveNode(ev) {
+    ev.currentTarget.classList.remove('drag-over');
+}
+
+async function dropNode(ev, level, targetNodeId) {
+    const questionId = ev.dataTransfer.getData("questionId");
+    if (questionId) {
+        // It's a question, let it bubble up, but we remove drag-over
+        ev.currentTarget.classList.remove('drag-over');
+        return; 
+    }
+    
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.currentTarget.classList.remove('drag-over');
+    
+    const sourceNodeId = ev.dataTransfer.getData("nodeId");
+    const sourceLevel = ev.dataTransfer.getData("nodeLevel");
+    
+    if (!sourceNodeId || sourceLevel != level || sourceNodeId == targetNodeId) return;
+    
+    try {
+        const response = await fetch('/admin/thematics/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userId: state.userId,
+                source_node_id: parseInt(sourceNodeId),
+                target_node_id: parseInt(targetNodeId),
+                level: parseInt(level)
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            loadCurriculum();
+            if (!window.silent) showToast("تم تغيير الترتيب بنجاح", "success");
+        } else {
+            alert("Error: " + data.error);
+        }
+    } catch (err) {
+        console.error("Reorder error:", err);
+    }
+}

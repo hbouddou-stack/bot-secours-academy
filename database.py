@@ -10,13 +10,44 @@ import os
 
 async def init_db():
     """Initialize SQLite database and create all tables if they do not exist."""
+    db_dir = os.path.dirname(DATABASE_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
     local_db = os.path.join(os.path.dirname(__file__), "backup_bot.db")
     if DATABASE_PATH != local_db and os.path.exists(local_db):
-        # Force copy if the volume DB doesn't exist or is nearly empty (< 1MB)
-        if not os.path.exists(DATABASE_PATH) or os.path.getsize(DATABASE_PATH) < 1000000:
+        should_copy = False
+        if not os.path.exists(DATABASE_PATH):
+            should_copy = True
+        else:
+            db_size = os.path.getsize(DATABASE_PATH)
+            if db_size < 3000000:  # If less than 3MB (our seeded DB is 3.9MB)
+                should_copy = True
+            else:
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(DATABASE_PATH)
+                    c = conn.cursor()
+                    c.execute("SELECT COUNT(*) FROM questions")
+                    cnt = c.fetchone()[0]
+                    conn.close()
+                    if cnt == 0:
+                        should_copy = True
+                except Exception:
+                    should_copy = True
+                    
+        if should_copy:
             try:
+                # Remove WAL/shm files if they exist to avoid corruption when replacing the main file
+                for ext in ["-wal", "-shm"]:
+                    extra_file = DATABASE_PATH + ext
+                    if os.path.exists(extra_file):
+                        try:
+                            os.remove(extra_file)
+                        except Exception:
+                            pass
                 shutil.copy2(local_db, DATABASE_PATH)
-                logger.info(f"Copied seeded database to {DATABASE_PATH}")
+                logger.info(f"Forced copy of seeded database to {DATABASE_PATH}")
             except Exception as e:
                 logger.error(f"Failed to copy seeded db: {e}")
             
@@ -285,6 +316,29 @@ async def init_db():
             );
         """)
 
+        # 15. programs - Curriculum Mapping (Level 1)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS programs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject TEXT,
+                name TEXT
+            );
+        """)
+
+        # 16. thematic_nodes - Curriculum Mapping (Levels 2-4)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS thematic_nodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                program_id INTEGER,
+                parent_id INTEGER,
+                level INTEGER,
+                title TEXT,
+                order_index INTEGER,
+                FOREIGN KEY(program_id) REFERENCES programs(id) ON DELETE CASCADE,
+                FOREIGN KEY(parent_id) REFERENCES thematic_nodes(id) ON DELETE CASCADE
+            );
+        """)
+
         # Migration: copy existing mind_map_file_id into lesson_mind_map_pages (page 1) if not already there
         async with db.execute("SELECT subject, course_number, mind_map_file_id FROM lesson_resources WHERE mind_map_file_id IS NOT NULL") as cur:
             rows_to_migrate = await cur.fetchall()
@@ -319,6 +373,8 @@ async def init_db():
                 await db.execute("ALTER TABLE questions ADD COLUMN is_active INTEGER DEFAULT 1;")
             if 'sub_theme' not in columns:
                 await db.execute("ALTER TABLE questions ADD COLUMN sub_theme TEXT;")
+            if 'thematic_node_id' not in columns:
+                await db.execute("ALTER TABLE questions ADD COLUMN thematic_node_id INTEGER;")
                 
         # Migration: Clean up Sira themes on remote persistent DB
         await db.execute("UPDATE questions SET theme='العبادات والمعاملات والتشريعات' WHERE theme='فرض زكاة الفطر وتعدد الآراء في زكاة المال'")
@@ -329,6 +385,18 @@ async def init_db():
         # Migration: Inject course_number into Sira source where it's missing
         await db.execute("UPDATE questions SET explanation = REPLACE(explanation, 'تفريغ الدرس (', 'تفريغ الدرس ' || course_number || ' (') WHERE subject='sira' AND explanation LIKE '%تفريغ الدرس (%'")
         
+        # Migration: Fix Sira questions source bug (revert AI questions mistakenly marked as official)
+        await db.execute(
+            """
+            UPDATE questions 
+            SET source = 'generated_by_gemini' 
+            WHERE subject = 'sira' 
+              AND hijra_year IS NOT NULL 
+              AND source = 'official'
+            """
+        )
+        await db.commit()
+
         # Migration: Load course_chapters from sync file if present
         import json
         sync_files = [
@@ -3124,3 +3192,53 @@ async def get_questions_by_lesson_for_flashcards(subject: str, course_number: in
 
 
 
+
+
+async def get_available_themes(subject: str) -> list[dict]:
+    """Retrieve all unique Level 2 themes available for a subject."""
+    import aiosqlite
+    from config import DATABASE_PATH
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT tn.id, tn.title 
+            FROM thematic_nodes tn
+            JOIN programs p ON tn.program_id = p.id
+            WHERE p.alias = ? AND tn.level = 2
+            ORDER BY tn.order_index
+        """, (subject.lower().strip(),)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+async def get_questions_for_theme_nodes(theme_ids: list[int]) -> list[dict]:
+    """Retrieve all questions for specified Level 2 themes and their sub-themes."""
+    if not theme_ids:
+        return []
+    import aiosqlite
+    from config import DATABASE_PATH
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        placeholders = ",".join("?" for _ in theme_ids)
+        
+        query_nodes = f"""
+            SELECT id FROM thematic_nodes 
+            WHERE id IN ({placeholders}) OR parent_id IN ({placeholders})
+        """
+        params_nodes = list(theme_ids) + list(theme_ids)
+        async with db.execute(query_nodes, params_nodes) as cursor:
+            nodes_rows = await cursor.fetchall()
+            node_ids = [r['id'] for r in nodes_rows]
+            
+        if not node_ids:
+            return []
+            
+        node_placeholders = ",".join("?" for _ in node_ids)
+        query_questions = f"""
+            SELECT * FROM questions 
+            WHERE thematic_node_id IN ({node_placeholders}) AND is_active = 1
+            ORDER BY thematic_node_id, id
+        """
+        async with db.execute(query_questions, node_ids) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]

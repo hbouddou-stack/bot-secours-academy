@@ -204,7 +204,7 @@ async def cmd_start(message: Message, state: FSMContext):
     )
     if is_admin(user_id):
         import os
-        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
+        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or f"{kb.get_webapp_base_url()}/admin"
         if not admin_webapp.startswith("https"):
             welcome_text += f"\n\n🖥️ <b>رابط لوحة التحكم للمشرف:</b>\n🔗 <a href='{admin_webapp}'>{admin_webapp}</a>"
     
@@ -246,7 +246,7 @@ async def cmd_menu(message: Message, state: FSMContext):
     )
     if is_admin(user_id):
         import os
-        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
+        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or f"{kb.get_webapp_base_url()}/admin"
         if not admin_webapp.startswith("https"):
             welcome_text += f"\n\n🖥️ <b>رابط لوحة التحكم للمشرف:</b>\n🔗 <a href='{admin_webapp}'>{admin_webapp}</a>"
     
@@ -357,7 +357,7 @@ async def finish_onboarding_and_show_main_menu(message_or_callback, state: FSMCo
     )
     if is_admin(user_id):
         import os
-        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
+        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or f"{kb.get_webapp_base_url()}/admin"
         if not admin_webapp.startswith("https"):
             welcome_text += f"\n\n🖥️ <b>رابط لوحة التحكم للمشرف:</b>\n🔗 <a href='{admin_webapp}'>{admin_webapp}</a>"
             
@@ -746,7 +746,7 @@ async def handle_guide_finish(callback: CallbackQuery, state: FSMContext):
     )
     if is_admin(user_id):
         import os
-        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
+        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or f"{kb.get_webapp_base_url()}/admin"
         if not admin_webapp.startswith("https"):
             welcome_text += f"\n\n🖥️ <b>رابط لوحة التحكم للمشرف:</b>\n🔗 <a href='{admin_webapp}'>{admin_webapp}</a>"
             
@@ -1058,7 +1058,7 @@ async def handle_prog_close(callback: CallbackQuery, state: FSMContext):
     )
     if is_admin(user_id):
         import os
-        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
+        admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or f"{kb.get_webapp_base_url()}/admin"
         if not admin_webapp.startswith("https"):
             welcome_text += f"\n\n🖥️ <b>رابط لوحة التحكم للمشرف:</b>\n🔗 <a href='{admin_webapp}'>{admin_webapp}</a>"
             

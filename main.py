@@ -1,4 +1,42 @@
 import asyncio
+
+# --- DB TRANSCRIPTS HELPERS ---
+async def load_lessons_from_db():
+    import aiosqlite, json
+    from config import DATABASE_PATH
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("SELECT lesson_data FROM course_transcripts") as cur:
+            rows = await cur.fetchall()
+    return [json.loads(r[0]) for r in rows]
+
+async def update_static_json_cache():
+    import json, os
+    all_lessons = await load_lessons_from_db()
+    root_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'transcripts.json')
+    dash_path = os.path.join(os.path.dirname(__file__), '..', 'dashboard', 'transcripts.json')
+    try:
+        with open(root_path, 'w', encoding='utf-8') as f:
+            json.dump(all_lessons, f, ensure_ascii=False)
+        with open(dash_path, 'w', encoding='utf-8') as f:
+            json.dump(all_lessons, f, ensure_ascii=False)
+    except Exception as e:
+        import logging
+        logging.error(f"Failed to update static JSON cache: {e}")
+
+async def save_lesson_to_db(subject, lesson_num, lesson_data):
+    import aiosqlite, json
+    from config import DATABASE_PATH
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("UPDATE course_transcripts SET lesson_data = ? WHERE subject = ? AND lesson_num = ?", 
+            (json.dumps(lesson_data, ensure_ascii=False), subject, int(lesson_num)))
+        await db.commit()
+    await update_static_json_cache()
+
+async def init_static_cache():
+    import asyncio
+    asyncio.create_task(update_static_json_cache())
+# ------------------------------
+
 import logging
 import os
 import json
@@ -23,6 +61,7 @@ from handlers.admin import router as admin_router
 from handlers.revision import router as revision_router
 
 # Configuration du logging double (console et fichier bot.log)
+INSTANCE_ID = str(uuid.uuid4())
 log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 log_file_path = os.path.join(os.path.dirname(__file__), "bot.log")
 logging.basicConfig(
@@ -118,6 +157,16 @@ async def handle_index(request):
 async def handle_interactive(request):
     return web.FileResponse(os.path.join(DASHBOARD_DIR, 'interactive.html'))
 
+async def handle_admin_mindmap(request):
+    return web.FileResponse(os.path.join(DASHBOARD_DIR, 'admin_mindmap.html'))
+
+
+async def handle_editor(request):
+    print("============= handle_editor CALLED =============")
+    f = os.path.join(DASHBOARD_DIR, 'editor.html')
+    print(f"File path: {f}, exists: {os.path.exists(f)}")
+    return web.FileResponse(f)
+
 async def handle_admin(request):
     return web.FileResponse(os.path.join(DASHBOARD_DIR, 'admin.html'))
 
@@ -146,10 +195,12 @@ async def handle_search(request):
     return web.FileResponse(os.path.join(DASHBOARD_DIR, 'search.html'))
 
 async def handle_transcripts(request):
-    transcripts_path = os.path.join(DASHBOARD_DIR, 'transcripts.json')
-    if not os.path.exists(transcripts_path):
-        transcripts_path = os.path.join(DASHBOARD_DIR, 'transcripts.json.bak')
-    return web.FileResponse(transcripts_path)
+    try:
+        lessons = await load_lessons_from_db()
+        return web.json_response(lessons)
+    except Exception as e:
+        logger.error(f"Error serving transcripts: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 async def handle_quran(request):
     return web.FileResponse(os.path.join(DASHBOARD_DIR, 'quran_db.json'))
@@ -802,11 +853,8 @@ async def edit_course_chapter(request):
         if not await check_admin(user_id):
             return web.json_response({"success": False, "error": "Access denied"}, status=403)
             
-        transcripts_path = 'dashboard/transcripts.json'
-        if os.path.exists(transcripts_path):
-            with open(transcripts_path, 'r', encoding='utf-8') as f:
-                lessons = json.load(f)
-                
+        lessons = await load_lessons_from_db()
+        if lessons is not None:
             lesson = next((l for l in lessons if l.get('subject') == subject and l.get('lessonNum') == lesson_num), None)
             if lesson and 'thematic_blocks' in lesson and len(lesson['thematic_blocks']) > chapter_idx:
                 block = lesson['thematic_blocks'][chapter_idx]
@@ -819,8 +867,7 @@ async def edit_course_chapter(request):
                 if new_poetry is not None:
                     block['poetry_verses'] = new_poetry
                 
-                with open(transcripts_path, 'w', encoding='utf-8') as f:
-                    json.dump(lessons, f, ensure_ascii=False, indent=4)
+                await save_lesson_to_db(subject, lesson_num, lesson)
                     
                 # Sync with SQLite DB
                 try:
@@ -884,11 +931,8 @@ async def save_lesson_axes(request):
         if not await check_admin(user_id):
             return web.json_response({"success": False, "error": "Access denied"}, status=403)
             
-        transcripts_path = 'dashboard/transcripts.json'
-        if os.path.exists(transcripts_path):
-            with open(transcripts_path, 'r', encoding='utf-8') as f:
-                lessons = json.load(f)
-                
+        lessons = await load_lessons_from_db()
+        if lessons is not None:
             lesson = next((l for l in lessons if l.get('subject') == subject and l.get('lessonNum') == lesson_num), None)
             if lesson:
                 # Update thematic blocks array in JSON
@@ -903,8 +947,7 @@ async def save_lesson_axes(request):
                     })
                 lesson['thematic_blocks'] = new_blocks
                 
-                with open(transcripts_path, 'w', encoding='utf-8') as f:
-                    json.dump(lessons, f, ensure_ascii=False, indent=4)
+                await save_lesson_to_db(subject, lesson_num, lesson)
                     
                 # Sync to database: DELETE existing and INSERT/REPLACE all
                 try:
@@ -1306,10 +1349,8 @@ async def save_bulk_questions(request):
 
         # Get course name
         course_name = ""
-        transcripts_path = 'dashboard/transcripts.json'
-        if os.path.exists(transcripts_path):
-            with open(transcripts_path, 'r', encoding='utf-8') as f:
-                lessons = json.load(f)
+        lessons = await load_lessons_from_db()
+        if True:
             lesson = next((l for l in lessons if l.get('subject') == subject and l.get('lessonNum') == lesson_num), None)
             if lesson:
                 course_name = lesson.get('title', '')
@@ -1365,11 +1406,8 @@ async def save_full_transcript(request):
         if not subject or lesson_num is None or new_segments is None:
             return web.json_response({"success": False, "error": "Missing parameters"}, status=400)
             
-        transcripts_path = 'dashboard/transcripts.json'
-        if os.path.exists(transcripts_path):
-            with open(transcripts_path, 'r', encoding='utf-8') as f:
-                lessons = json.load(f)
-                
+        lessons = await load_lessons_from_db()
+        if lessons is not None:
             lesson = next((l for l in lessons if l.get('subject') == subject and l.get('lessonNum') == lesson_num), None)
             if lesson:
                 lesson['segments'] = new_segments
@@ -1379,8 +1417,7 @@ async def save_full_transcript(request):
                 # Also rebuild full_text
                 lesson['full_text'] = " ".join(seg.get('text', '') for seg in new_segments)
                 
-                with open(transcripts_path, 'w', encoding='utf-8') as f:
-                    json.dump(lessons, f, ensure_ascii=False, indent=4)
+                await save_lesson_to_db(subject, lesson_num, lesson)
                     
                 # Sync all thematic blocks to SQLite DB
                 try:
@@ -2339,6 +2376,248 @@ async def admin_get_themes(request):
                 return web.json_response({"success": True, "sub_themes": results})
     except Exception as e:
         logger.error(f"Error in admin_get_themes: {e}")
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
+# --- Curriculum Mapping Endpoints ---
+
+async def get_admin_thematics(request: web.Request):
+    try:
+        data = await request.json()
+        user_id = data.get('userId')
+        if not await check_admin(user_id):
+            return web.json_response({"success": False, "error": "Access denied"}, status=403)
+            
+        subject_filter = data.get('subject', None)
+        academic_year = data.get('academic_year', None)
+        
+        from config import DATABASE_PATH
+        import aiosqlite
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            
+            # Fetch programs
+            query_prog = "SELECT * FROM programs"
+            params_prog = []
+            if subject_filter:
+                query_prog += " WHERE subject = ?"
+                params_prog.append(subject_filter)
+            async with db.execute(query_prog, params_prog) as cursor:
+                programs = [dict(r) for r in await cursor.fetchall()]
+                
+            # Fetch nodes
+            if subject_filter and programs:
+                prog_ids = [p['id'] for p in programs]
+                placeholders = ','.join('?' for _ in prog_ids)
+                query_nodes = f"SELECT * FROM thematic_nodes WHERE program_id IN ({placeholders}) ORDER BY level, order_index"
+                async with db.execute(query_nodes, prog_ids) as cursor:
+                    nodes = [dict(r) for r in await cursor.fetchall()]
+            else:
+                query_nodes = "SELECT * FROM thematic_nodes ORDER BY level, order_index"
+                async with db.execute(query_nodes) as cursor:
+                    nodes = [dict(r) for r in await cursor.fetchall()]
+                
+            # Fetch unassigned_questions
+            query_unassigned = "SELECT id, question, subject, course_number, source FROM questions WHERE thematic_node_id IS NULL AND source = 'official'"
+            params_unassigned = []
+            if subject_filter:
+                query_unassigned += " AND subject = ?"
+                params_unassigned.append(subject_filter)
+            if academic_year:
+                query_unassigned += " AND hijra_year = ?"
+                params_unassigned.append(int(academic_year))
+                
+            async with db.execute(query_unassigned, params_unassigned) as cursor:
+                unassigned_questions = [dict(r) for r in await cursor.fetchall()]
+
+        return web.json_response({
+            "success": True,
+            "programs": programs,
+            "nodes": nodes,
+            "unassigned_questions": unassigned_questions
+        })
+    except Exception as e:
+        logger.error(f"Error in get_admin_thematics: {e}")
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
+
+async def get_node_questions(request: web.Request):
+    try:
+        data = await request.json()
+        user_id = data.get('userId')
+        if not await check_admin(user_id):
+            return web.json_response({"success": False, "error": "Access denied"}, status=403)
+            
+        node_id = data.get('node_id')
+        if not node_id:
+            return web.json_response({"success": False, "error": "Missing node_id"}, status=400)
+        
+        from config import DATABASE_PATH
+        import aiosqlite
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            query = """
+                WITH RECURSIVE node_tree(id) AS (
+                    SELECT id FROM thematic_nodes WHERE id = ?
+                    UNION ALL
+                    SELECT t.id FROM thematic_nodes t
+                    INNER JOIN node_tree nt ON t.parent_id = nt.id
+                )
+                SELECT id, question, subject, course_number, source 
+                FROM questions 
+                WHERE thematic_node_id IN node_tree
+            """
+            async with db.execute(query, (node_id,)) as cursor:
+                questions = [dict(r) for r in await cursor.fetchall()]
+                
+        return web.json_response({"success": True, "questions": questions})
+    except Exception as e:
+        import logging
+        logging.getLogger('bot').error(f"Error in get_node_questions: {e}")
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
+
+async def reorder_admin_thematics(request: web.Request):
+    try:
+        data = await request.json()
+        user_id = data.get('userId')
+        if not await check_admin(user_id):
+            return web.json_response({"success": False, "error": "Access denied"}, status=403)
+            
+        source_node_id = data.get("source_node_id")
+        target_node_id = data.get("target_node_id")
+        level = data.get("level")
+        
+        from config import DATABASE_PATH
+        import aiosqlite
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            # 1. Obtenir les infos du target node pour connaitre le contexte (parent_id, program_id)
+            async with db.execute("SELECT parent_id, program_id FROM thematic_nodes WHERE id = ?", (target_node_id,)) as cursor:
+                target_row = await cursor.fetchone()
+            if not target_row:
+                return web.json_response({"success": False, "error": "Target node not found"})
+                
+            parent_id, program_id = target_row
+            
+            # 2. Obtenir tous les noeuds frères (siblings) ordonnés
+            if parent_id is None:
+                query = "SELECT id FROM thematic_nodes WHERE program_id = ? AND level = ? AND parent_id IS NULL ORDER BY order_index, title"
+                params = (program_id, level)
+            else:
+                query = "SELECT id FROM thematic_nodes WHERE program_id = ? AND level = ? AND parent_id = ? ORDER BY order_index, title"
+                params = (program_id, level, parent_id)
+                
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                
+            sibling_ids = [row[0] for row in rows]
+            
+            # 3. Réorganiser la liste
+            if source_node_id in sibling_ids and target_node_id in sibling_ids:
+                sibling_ids.remove(source_node_id)
+                target_index = sibling_ids.index(target_node_id)
+                # Inserer le source juste avant le target
+                sibling_ids.insert(target_index, source_node_id)
+                
+                # 4. Mettre à jour la base de données
+                for idx, node_id in enumerate(sibling_ids):
+                    await db.execute("UPDATE thematic_nodes SET order_index = ? WHERE id = ?", (idx, node_id))
+                await db.commit()
+                return web.json_response({"success": True})
+            else:
+                return web.json_response({"success": False, "error": "Nodes are not siblings"})
+                
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
+
+async def toggle_node_visibility(request: web.Request):
+    try:
+        data = await request.json()
+        user_id = data.get('userId')
+        if not await check_admin(user_id):
+            return web.json_response({"success": False, "error": "Access denied"}, status=403)
+            
+        node_id = data.get('node_id')
+        if not node_id:
+            return web.json_response({"success": False, "error": "Missing node_id"}, status=400)
+            
+        from config import DATABASE_PATH
+        import aiosqlite
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            async with db.execute("SELECT is_active FROM thematic_nodes WHERE id = ?", (node_id,)) as cur:
+                row = await cur.fetchone()
+                if not row:
+                    return web.json_response({"success": False, "error": "Node not found"})
+                new_status = 0 if row[0] == 1 else 1
+            await db.execute("UPDATE thematic_nodes SET is_active = ? WHERE id = ?", (new_status, node_id))
+            await db.commit()
+            
+        return web.json_response({"success": True, "is_active": new_status})
+    except Exception as e:
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
+async def save_admin_thematics(request: web.Request):
+    try:
+        data = await request.json()
+        user_id = data.get('userId')
+        if not await check_admin(user_id):
+            return web.json_response({"success": False, "error": "Access denied"}, status=403)
+            
+        action = data.get("action")
+        
+        from config import DATABASE_PATH
+        import aiosqlite
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            if action == "assign_question":
+                question_id = data.get("question_id")
+                node_id = data.get("node_id") # Can be None if moving back to Inbox
+                await db.execute("UPDATE questions SET thematic_node_id = ? WHERE id = ?", (node_id, question_id))
+                await db.commit()
+                return web.json_response({"success": True})
+                
+            elif action == "add_program":
+                subject = data.get("subject")
+                name = data.get("name")
+                async with db.execute("INSERT INTO programs (subject, name) VALUES (?, ?)", (subject, name)) as cursor:
+                    await db.commit()
+                    return web.json_response({"success": True, "id": cursor.lastrowid})
+                    
+            elif action == "add_node":
+                program_id = data.get("program_id")
+                parent_id = data.get("parent_id")
+                level = data.get("level")
+                title = data.get("title")
+                order_index = data.get("order_index", 0)
+                
+                async with db.execute(
+                    "INSERT INTO thematic_nodes (program_id, parent_id, level, title, order_index) VALUES (?, ?, ?, ?, ?)",
+                    (program_id, parent_id, level, title, order_index)
+                ) as cursor:
+                    await db.commit()
+                    return web.json_response({"success": True, "id": cursor.lastrowid})
+                    
+            elif action == "update_node":
+                node_id = data.get("node_id")
+                title = data.get("title")
+                await db.execute("UPDATE thematic_nodes SET title = ? WHERE id = ?", (title, node_id))
+                await db.commit()
+                return web.json_response({"success": True})
+                
+            elif action == "delete_node":
+                node_id = data.get("node_id")
+                # Because of ON DELETE CASCADE, child nodes will also be deleted
+                await db.execute("DELETE FROM thematic_nodes WHERE id = ?", (node_id,))
+                await db.execute("UPDATE questions SET thematic_node_id = NULL WHERE thematic_node_id = ?", (node_id,))
+                await db.commit()
+                return web.json_response({"success": True})
+                
+            else:
+                return web.json_response({"success": False, "error": "Invalid action"}, status=400)
+                
+    except Exception as e:
+        logger.error(f"Error in save_admin_thematics: {e}")
         return web.json_response({"success": False, "error": str(e)}, status=500)
 
 
@@ -3431,6 +3710,10 @@ async def start_web_server(bot: Bot):
     
     app.router.add_get('/', handle_index)
     app.router.add_get('/interactive.html', handle_interactive)
+    app.router.add_get('/admin_mindmap.html', handle_admin_mindmap)
+    
+    app.router.add_get('/editor', handle_editor)
+    app.router.add_get('/editor.html', handle_editor)
     app.router.add_get('/admin', handle_admin)
     app.router.add_get('/admin.html', handle_admin)
     app.router.add_get('/admin-bot', handle_admin_bot)
@@ -3509,11 +3792,16 @@ async def start_web_server(bot: Bot):
     app.router.add_post('/admin/custom-views/save', save_custom_view)
     app.router.add_post('/admin/custom-views/delete', delete_custom_view)
     app.router.add_post('/admin/custom-views/reorder', reorder_custom_views)
+    app.router.add_post('/admin/thematics', get_admin_thematics)
+    app.router.add_post('/admin/thematics/node_questions', get_node_questions)
+    app.router.add_post('/admin/thematics/save', save_admin_thematics)
+    app.router.add_post('/admin/thematics/reorder', reorder_admin_thematics)
 
-    # Expose web server on PORT environment variable, or fallback to 8082 (to avoid 8080 conflicts)
-    port = int(os.environ.get("PORT", 8082))
+    # Expose web server on PORT environment variable, or fallback to 8080 (to avoid conflicts)
+    port = int(os.environ.get("PORT", 8080))
     runner = web.AppRunner(app)
     await runner.setup()
+    await init_static_cache()
     site = web.TCPSite(runner, '0.0.0.0', port)
     
     logger.info(f"🌐 [Backup Web Server] launched on port {port}")
@@ -3526,6 +3814,11 @@ async def on_startup(bot: Bot):
     logger.info("Initializing database on startup...")
     await db.init_db()
     logger.info("Database initialized.")
+    try:
+        await db.set_setting("current_instance_id", INSTANCE_ID)
+        logger.info(f"Registered instance ID in database settings: {INSTANCE_ID}")
+    except Exception as e:
+        logger.error(f"Failed to register instance ID in database: {e}")
     
     # Set bot description (shown before starting the bot)
     welcome_description = (
@@ -3617,7 +3910,6 @@ async def main():
     dp.startup.register(on_startup)
 
     # ─── RAILWAY ZERO-DOWNTIME CONFLICT RESOLUTION ───
-    INSTANCE_ID = str(uuid.uuid4())
     logger.info(f"Démarrage de l'instance courante avec ID: {INSTANCE_ID}")
     
     async def watch_for_new_instance():
@@ -3636,15 +3928,6 @@ async def main():
                             break
             except Exception:
                 pass
-
-    try:
-        from config import DATABASE_PATH
-        if os.path.exists(DATABASE_PATH):
-            async with aiosqlite.connect(DATABASE_PATH) as db_conn:
-                await db_conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ('current_instance_id', INSTANCE_ID))
-                await db_conn.commit()
-    except Exception as e:
-        logger.error(f"Failed to register instance ID: {e}")
         
     asyncio.create_task(watch_for_new_instance())
     # ──────────────────────────────────────────────────
@@ -3655,6 +3938,10 @@ async def main():
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
+        
+    # Keep web server alive even if polling stops (Railway conflict)
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     try:

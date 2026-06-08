@@ -308,18 +308,20 @@ def get_lessons_grid_keyboard(subject: str, available_lessons: list[int], select
     rows.append([InlineKeyboardButton(text="↩️ عودة", callback_data="les_back")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-def get_themes_grid_keyboard(subject: str, selected_themes: list[str] = None, available_themes: list[str] = None) -> InlineKeyboardMarkup:
+def get_themes_grid_keyboard(subject: str, selected_themes: list[int] = None, available_themes: list[dict] = None) -> InlineKeyboardMarkup:
     """Create a keyboard of themes for a subject with simple buttons (main theme is single-choice)."""
     hidden_themes = get_hidden_items_sync(f"themes_{subject}")
     
     rows = []
     row = []
     if available_themes:
-        for idx, th in enumerate(available_themes):
-            if th in hidden_themes:
+        for th in available_themes:
+            th_id = th['id']
+            lbl = th['title']
+            if lbl in hidden_themes or str(th_id) in hidden_themes:
                 continue
-            btn = InlineKeyboardButton(text=th, callback_data=f"select_th:{idx}")
-            if len(th) >= 28:
+            btn = InlineKeyboardButton(text=lbl, callback_data=f"select_th:{th_id}")
+            if len(lbl) >= 28:
                 if row:
                     rows.append(row)
                     row = []
@@ -785,8 +787,43 @@ def get_report_error_options_keyboard(question_id: int, source: str = "quiz") ->
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-def get_admin_panel_keyboard(pending_reports: int = 0, pending_proposals: int = 0, show_settings: bool = False) -> InlineKeyboardMarkup:
+def get_webapp_base_url() -> str:
+    url = os.getenv("WEBAPP_URL")
+    if url and url.strip():
+        return url.strip()
+    
+    railway_url = os.getenv("RAILWAY_STATIC_URL")
+    if railway_url and railway_url.strip():
+        r_url = railway_url.strip()
+        if not r_url.startswith("http"):
+            return f"https://{r_url}"
+        return r_url
+        
+    return "http://localhost:8080"
+
+def get_admin_panel_keyboard(pending_reports: int = 0, pending_proposals: int = 0, show_settings: bool = False, role: str = None) -> InlineKeyboardMarkup:
     """Keyboard for the Admin Panel with inbox first, stats, settings, and student mode switcher."""
+    base_url = get_webapp_base_url()
+    
+    # In production/Railway serveo, if ADMIN_WEBAPP_URL is not set explicitly, we construct it dynamically
+    admin_webapp = os.getenv("ADMIN_WEBAPP_URL")
+    if not admin_webapp or not admin_webapp.strip():
+        admin_webapp = f"{base_url}/admin"
+        
+    editor_webapp = os.getenv("EDITOR_WEBAPP_URL")
+    if not editor_webapp or not editor_webapp.strip():
+        editor_webapp = f"{base_url}/editor"
+
+    # If the user is specifically a content editor/transcriptionist (improvement_admin),
+    # they should only see the editor webapp button and student mode switcher
+    if role == "improvement_admin":
+        rows = []
+        if editor_webapp.startswith("https"):
+            btn_editor = InlineKeyboardButton(text="📝 لوحة تحرير الدروس Editor 📱", web_app=WebAppInfo(url=editor_webapp))
+            rows.append([btn_editor])
+        rows.append([InlineKeyboardButton(text="🎓 وضع الطالب", callback_data="admin_switch_student")])
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+
     inbox_text = "📬 بريد الإدارة"
     if pending_reports > 0:
         inbox_text += f" ({pending_reports} 🔴)"
@@ -795,17 +832,24 @@ def get_admin_panel_keyboard(pending_reports: int = 0, pending_proposals: int = 
     if pending_proposals > 0:
         prop_text += f" ({pending_proposals} 🔴)"
         
-    admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
-    student_webapp = os.getenv("WEBAPP_URL") or "http://localhost:8080"
-    if not student_webapp.endswith("/"):
-        student_webapp += "/"
-        
     rows = []
+    
+    # WebApp buttons
+    web_app_buttons = []
     if admin_webapp.startswith("https"):
-        btn_admin = InlineKeyboardButton(text="🖥️ لوحة التحكم Admin 📱", web_app=WebAppInfo(url=admin_webapp))
-        btn_mini = InlineKeyboardButton(text="🎓 أكاديمية الباجي — Mini App 📱", web_app=WebAppInfo(url=f"{student_webapp}interactive.html?v=4"))
-        rows.append([btn_admin])
+        web_app_buttons.append(InlineKeyboardButton(text="🖥️ لوحة التحكم Admin 📱", web_app=WebAppInfo(url=admin_webapp)))
+    if editor_webapp.startswith("https"):
+        web_app_buttons.append(InlineKeyboardButton(text="📝 لوحة المحرر Editor 📱", web_app=WebAppInfo(url=editor_webapp)))
+        
+    for btn in web_app_buttons:
+        rows.append([btn])
+        
+    # We also add student mini app and reader webapps if base_url is https
+    if base_url.startswith("https"):
+        btn_mini = InlineKeyboardButton(text="🎓 أكاديمية الباجي — Mini App 📱", web_app=WebAppInfo(url=f"{base_url}/interactive.html?v=4"))
+        btn_reader = InlineKeyboardButton(text="📖 وضع القراءة (Liseuse) 📱", web_app=WebAppInfo(url=f"{base_url}/reader.html?lesson=14"))
         rows.append([btn_mini])
+        rows.append([btn_reader])
         
     rows.extend([
         [InlineKeyboardButton(text=inbox_text, callback_data="admin_reports_center")],

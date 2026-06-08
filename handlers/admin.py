@@ -92,7 +92,7 @@ async def _get_admin_keyboard(user_id: int) -> kb.InlineKeyboardMarkup:
     pending_props = len(await db.get_pending_proposals())
     role = await db.get_admin_role(user_id)
     show_settings = (role in ("super_admin", "backup_admin"))
-    return kb.get_admin_panel_keyboard(pending_reports=pending_count, pending_proposals=pending_props, show_settings=show_settings)
+    return kb.get_admin_panel_keyboard(pending_reports=pending_count, pending_proposals=pending_props, show_settings=show_settings, role=role)
 
 # --- Emergency Purge Command ---
 @router.message(Command("purge_course"))
@@ -151,7 +151,7 @@ async def cmd_admin(event: Message | CallbackQuery, state: FSMContext):
         "يمكنك من هنا الاطلاع على إحصائيات الاستخدام، إدارة الرسائل والبلاغات، أو إرسال الإعلانات."
     )
     
-    admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or "http://localhost:8082/admin"
+    admin_webapp = os.getenv("ADMIN_WEBAPP_URL") or f"{kb.get_webapp_base_url()}/admin"
     if not admin_webapp.startswith("https"):
         text += f"\n\n🖥️ <b>رابط لوحة التحكم العام للمشرف:</b>\n🔗 <a href='{admin_webapp}'>{admin_webapp}</a>"
         
