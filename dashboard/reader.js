@@ -11,6 +11,14 @@ let syllabusCompletion = JSON.parse(localStorage.getItem('academy_syllabus_compl
 let syllabusMode = 'grid';
 let isSeekingTab = false;
 
+const SUBJECT_LABELS = {
+    'sira': 'السيرة النبوية',
+    'fiqh': 'الفقه',
+    'tahawi': 'العقيدة الطحاوية',
+    'adab': 'الأدب',
+    'nahw': 'النحو'
+};
+
 
 // UI State
 let currentTheme = localStorage.getItem('readerTheme') || 'sepia';
@@ -83,6 +91,12 @@ function openLesson(lesson) {
     
     document.getElementById('reader-content').style.display = 'block';
     currentLessonData = lesson;
+    
+    // Auto-seek logic
+    if (!pendingSeekTime && lesson.thematic_blocks && lesson.thematic_blocks.length > 0) {
+        pendingSeekTime = lesson.thematic_blocks[0].start_seconds;
+    }
+    
     prepareThematicData(lesson);
     renderLessonHeader(lesson);
     renderTabs();
