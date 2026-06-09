@@ -505,42 +505,35 @@ function openSubjectDetail(data, colorClass) {
         let deg = (p / 100) * 360;
         const isComplete = comp > 0 && comp === total;
         
-        const card = document.createElement('div');
-        card.className = `lesson-card ${isComplete ? 'completed' : ''}`;
+        const btn = document.createElement('button');
+        btn.className = `smart-lesson-btn ${colorClass} ${p === 100 ? 'completed' : ''}`;
         
         let badgeHtml = '';
         if (total > 0) {
             if (isComplete) {
-                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--success, #10b981); background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; line-height: 1.2;">✅ ${comp}/${total} محاور</div>`;
+                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--success, #10b981); background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box; margin-top: 4px; line-height: 1.2;">✅ ${comp}/${total} محاور</div>`;
             } else if (comp > 0) {
-                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--subject-color, var(--primary)); background: rgba(0, 0, 0, 0.05); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; line-height: 1.2;">▶️ ${comp}/${total} محاور</div>`;
+                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--subject-color, var(--primary, var(--accent-color))); background: rgba(0, 0, 0, 0.05); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box; margin-top: 4px; line-height: 1.2;">▶️ ${comp}/${total} محاور</div>`;
             } else {
-                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--text-3); background: rgba(0, 0, 0, 0.05); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; line-height: 1.2;">${total} محاور</div>`;
+                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--text-3); background: rgba(0, 0, 0, 0.05); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box; margin-top: 4px; line-height: 1.2;">${total} محاور</div>`;
             }
         }
 
-        let ringStyle = isComplete 
-            ? `background: var(--subject-color, var(--primary));` 
-            : `background: conic-gradient(var(--subject-color, var(--primary)) ${deg}deg, var(--bg-color, var(--surface)) 0deg);`;
+        let ringStyle = p === 100 
+            ? `background: var(--subject-color, var(--primary, var(--accent-color)));` 
+            : `background: conic-gradient(var(--subject-color, var(--primary, var(--accent-color))) ${deg}deg, var(--surface-2) 0deg);`;
 
-        let lessonTitleStr = l.title ? l.title : `الدرس ${l.lessonNum}`;
-
-        card.innerHTML = `
-            <div class="lesson-circle">
-                <div class="progress-ring" style="${ringStyle}">
-                    <div class="progress-ring-inner">${l.lessonNum}</div>
-                </div>
+        btn.innerHTML = `
+            <div class="ring" style="${ringStyle}">
+                <div class="inner">${l.lessonNum}</div>
             </div>
-            <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
-                <div class="lesson-title" style="margin-bottom: 2px; line-height: 1.2;">${lessonTitleStr}</div>
-                ${badgeHtml}
-            </div>
+            ${badgeHtml}
         `;
         
-        card.onclick = () => {
+        btn.onclick = () => {
             openLessonPreview(l);
         };
-        grid.appendChild(card);
+        grid.appendChild(btn);
     });
     
     listContainer.appendChild(grid);
