@@ -11350,6 +11350,8 @@ window.addEventListener('unhandledrejection', function(e) {
 
         }
 
+        window.showNotification = showToast;
+
         function renderTelegramPreview(text) {
 
             if (!text) return '<span style="color:var(--text-secondary); font-style:italic;">محتوى فارغ...</span>';
