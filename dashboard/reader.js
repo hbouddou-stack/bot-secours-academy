@@ -9,6 +9,7 @@ let wordIndex = [];
 let pendingSeekTime = null;
 let syllabusCompletion = JSON.parse(localStorage.getItem('academy_syllabus_completions')) || {};
 let syllabusMode = 'grid';
+let isSeekingTab = false;
 
 
 // UI State
@@ -945,8 +946,10 @@ function switchThemeTab(index, shouldSeek = true) {
 
     // Video Seek
     if (shouldSeek && player && player.seekTo) {
+        isSeekingTab = true;
         player.seekTo(data.startTime, true);
         player.playVideo();
+        setTimeout(() => { isSeekingTab = false; }, 1500);
         // Scroll to video
         window.scrollTo({top: 0, behavior: 'smooth'});
     } else if (shouldSeek) {
@@ -965,6 +968,7 @@ function createQuizElement(questionData) {
 
     let tempDiv = document.createElement('div');
     tempDiv.innerHTML = questionData.explanation || '';
+    let cleanExplanation = tempDiv.textContent || tempDiv.innerText || '';
     // Parse explanation like Telegram
     let text = cleanExplanation.trim();
     let sourceText = "";
@@ -1581,6 +1585,7 @@ window.addEventListener('wheel', () => {
 
 setInterval(() => {
     if (!player || !player.getPlayerState || player.getPlayerState() !== YT.PlayerState.PLAYING) return;
+    if (isSeekingTab) return;
     
     let currentTime = player.getCurrentTime();
     updateDashboardProgress();
