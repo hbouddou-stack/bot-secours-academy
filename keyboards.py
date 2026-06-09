@@ -43,6 +43,12 @@ def get_main_inline_keyboard(is_admin: bool = False, remaining_count: int = None
     ]
     rows.append(row1)
     
+    # Row 1.2: Liseuse (Reader)
+    base_url = get_webapp_base_url()
+    rows.append([
+        InlineKeyboardButton(text="📖 وضع القراءة (Liseuse)", web_app=WebAppInfo(url=f"{base_url}/reader.html?lesson=14"))
+    ])
+    
     # Row 1.5: Revision Library (full width)
     if "revision" not in hidden_buttons:
         rows.append([InlineKeyboardButton(text="📖 مكتبتي الشاملة", callback_data="main_revision")])
@@ -799,7 +805,8 @@ def get_webapp_base_url() -> str:
             return f"https://{r_url}"
         return r_url
         
-    return "http://localhost:8080"
+    # For local testing, use the local IP instead of localhost so it's accessible on mobile devices
+    return "http://192.168.1.3:8080"
 
 def get_admin_panel_keyboard(pending_reports: int = 0, pending_proposals: int = 0, show_settings: bool = False, role: str = None) -> InlineKeyboardMarkup:
     """Keyboard for the Admin Panel with inbox first, stats, settings, and student mode switcher."""
@@ -844,12 +851,9 @@ def get_admin_panel_keyboard(pending_reports: int = 0, pending_proposals: int = 
     for btn in web_app_buttons:
         rows.append([btn])
         
-    # We also add student mini app and reader webapps if base_url is https
-    if base_url.startswith("https"):
-        btn_mini = InlineKeyboardButton(text="🎓 أكاديمية الباجي — Mini App 📱", web_app=WebAppInfo(url=f"{base_url}/interactive.html?v=4"))
-        btn_reader = InlineKeyboardButton(text="📖 وضع القراءة (Liseuse) 📱", web_app=WebAppInfo(url=f"{base_url}/reader.html?lesson=14"))
-        rows.append([btn_mini])
-        rows.append([btn_reader])
+    # We also add student reader webapps
+    btn_reader = InlineKeyboardButton(text="📖 وضع القراءة (Liseuse) 📱", web_app=WebAppInfo(url=f"{base_url}/reader.html?lesson=14"))
+    rows.append([btn_reader])
         
     rows.extend([
         [InlineKeyboardButton(text=inbox_text, callback_data="admin_reports_center")],

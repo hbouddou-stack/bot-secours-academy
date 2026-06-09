@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let lessonParam = urlParams.get('lesson'); 
         let subjectParam = urlParams.get('subject'); 
 
-        const response = await fetch('transcripts.json');
+        const response = await fetch('transcripts.json?v=' + Date.now());
         DB = await response.json();
 
         buildSyllabusTab(DB);
@@ -548,8 +548,8 @@ function prepareThematicData(lesson) {
         
         let htmlContent = "";
 
-        // Regex matches 2-6 words before *** and 2-6 words after *** without punctuation
-        const poetryRegex = /([^\s*]+(?:\s+[^\s*]+){1,5})\s*\*\*\*\s*([^\s*]+(?:\s+[^\s*]+){1,5})/g;
+        // Extract tags [POEME:X] shatr 1 *** shatr 2 [/POEME] or just [POEME] shatr 1 *** shatr 2 [/POEME]
+        const poetryRegex = /\[POEME(?::(\d+))?\](.*?)\[\/POEME\]/g;
 
         let parts = [];
         let lastIndex = 0;
@@ -579,10 +579,20 @@ function prepareThematicData(lesson) {
             const prose = blockText.substring(lastIndex, match.index);
             if (prose) parts.push({ type: 'prose', content: prose });
             
+            // Inside the tag, we expect *** to separate the two halves, but it's optional in case they write a 1 line quote.
+            let innerText = match[2].trim();
+            let s1 = innerText, s2 = '';
+            if (innerText.includes('***')) {
+                let split = innerText.split('***');
+                s1 = split[0].trim();
+                s2 = split[1].trim();
+            }
+            
             parts.push({
                 type: 'poetry',
-                shatr1: match[1],
-                shatr2: match[2]
+                num: match[1] || null,
+                shatr1: s1,
+                shatr2: s2
             });
             lastIndex = poetryRegex.lastIndex;
         }
@@ -617,12 +627,15 @@ function prepareThematicData(lesson) {
                 }
             } else {
                 const s1 = injectKaraokeSpans(formatProse(part.shatr1.trim()));
-                const s2 = injectKaraokeSpans(formatProse(part.shatr2.trim()));
+                const s2 = part.shatr2 ? injectKaraokeSpans(formatProse(part.shatr2.trim())) : '';
+                const numBadge = part.num ? `<div style="position: absolute; top: -14px; right: 20px; background: var(--gold, #d4af37); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid white;">بيت ${part.num}</div>` : '';
+                
                 htmlContent += `
-                <div class="poetry-verse-container" style="position: relative; margin: 18px auto; max-width: 90%; direction: rtl; text-align: center;">
-                    <div class="poetry-verse" style="background: #fffdf5; border: 1.1px solid #f2e7c9; border-radius: 14px; padding: 16px 16px 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); font-family: 'Amiri', serif; line-height: 1.8; display: inline-block; width: 100%; box-sizing: border-box;">
-                        <div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; margin-bottom: 6px; text-align: center;">${s1}</div>
-                        <div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; text-align: center;">${s2}</div>
+                <div class="poetry-verse-container" style="position: relative; margin: 28px auto 18px auto; max-width: 90%; direction: rtl; text-align: center;">
+                    ${numBadge}
+                    <div class="poetry-verse" style="background: #fffdf5; border: 1.1px solid #f2e7c9; border-radius: 14px; padding: 16px 16px 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); font-family: 'Amiri', serif; line-height: 1.8; display: inline-block; width: 100%; box-sizing: border-box; margin-top: ${part.num ? '8px' : '0'};">
+                        <div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; margin-bottom: ${s2 ? '6px' : '0'}; text-align: center;">${s1}</div>
+                        ${s2 ? `<div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; text-align: center;">${s2}</div>` : ''}
                     </div>
                 </div>`;
             }

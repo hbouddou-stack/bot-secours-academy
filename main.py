@@ -956,13 +956,19 @@ async def save_lesson_axes(request):
         
         if user_id is not None:
             user_id = int(user_id)
-            
+        
+        if lesson_num is not None:
+            try:
+                lesson_num = int(lesson_num)
+            except (TypeError, ValueError):
+                pass
+
         if not await check_admin(user_id):
             return web.json_response({"success": False, "error": "Access denied"}, status=403)
             
         lessons = await load_lessons_from_db()
         if lessons is not None:
-            lesson = next((l for l in lessons if l.get('subject') == subject and l.get('lessonNum') == lesson_num), None)
+            lesson = next((l for l in lessons if l.get('subject') == subject and int(l.get('lessonNum', -1)) == int(lesson_num)), None)
             if lesson:
                 # Update thematic blocks array in JSON
                 new_blocks = []
@@ -1443,6 +1449,12 @@ async def save_full_transcript(request):
         lesson_num = data.get('lessonNum')
         new_segments = data.get('segments')
         new_thematic_blocks = data.get('thematicBlocks')
+
+        if lesson_num is not None:
+            try:
+                lesson_num = int(lesson_num)
+            except (TypeError, ValueError):
+                pass
         
         if not await check_admin(user_id):
             return web.json_response({"success": False, "error": "Access denied"}, status=403)
@@ -1452,7 +1464,7 @@ async def save_full_transcript(request):
             
         lessons = await load_lessons_from_db()
         if lessons is not None:
-            lesson = next((l for l in lessons if l.get('subject') == subject and l.get('lessonNum') == lesson_num), None)
+            lesson = next((l for l in lessons if l.get('subject') == subject and int(l.get('lessonNum', -1)) == int(lesson_num)), None)
             if lesson:
                 lesson['segments'] = new_segments
                 if new_thematic_blocks is not None:

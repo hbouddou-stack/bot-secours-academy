@@ -825,7 +825,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
                 // 4. Fetch course transcripts (lessons list)
 
-                const transcriptsRes = await fetch('/transcripts.json');
+                const transcriptsRes = await fetch('/transcripts.json?v=' + Date.now());
 
                 state.transcripts = await transcriptsRes.json();
 
@@ -9076,7 +9076,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
             } else {
 
-                editorHtml = `<textarea class="settings-textarea transcript-block-editor" data-block-id="${blockId}" data-first-sec="${firstSec}" data-last-sec="${lastSec}" data-first-ts="${firstTs}" data-video-link="${(vLink || '').replace(/"/g, '&quot;')}" data-seg-idxs='${JSON.stringify(segIdxs)}' style="width:100%; min-height:${Math.max(120, Math.min(400, Math.round(rawText.length / 3)))}px; font-family:'Tajawal',sans-serif; font-size:0.92rem; line-height:1.85; resize:vertical; box-sizing:border-box;" placeholder="${hasSegs ? '' : 'لا توجد مقاطع تفريغ لهذا المحور'}" ${!hasSegs ? 'disabled' : ''}>${escapedText}</textarea>`;
+                editorHtml = `<textarea class="settings-textarea transcript-block-editor" data-block-id="${blockId}" data-first-sec="${firstSec}" data-last-sec="${lastSec}" data-first-ts="${firstTs}" data-video-link="${(vLink || '').replace(/"/g, '&quot;')}" data-seg-idxs='${JSON.stringify(segIdxs)}' data-has-segs="${hasSegs}" style="width:100%; min-height:${Math.max(120, Math.min(400, Math.round(rawText.length / 3)))}px; font-family:'Tajawal',sans-serif; font-size:0.92rem; line-height:1.85; resize:vertical; box-sizing:border-box;" placeholder="${hasSegs ? '' : 'اكتب نص التفريغ لهذا المحور هنا...'}">${escapedText}</textarea>`;
 
             }
 
@@ -9112,7 +9112,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
                     ` : ''}
 
-                    <span style="font-size:0.72rem; color:var(--text-secondary); white-space:nowrap;">⏱ ${firstTs}</span>
+                    <span style="font-size:0.72rem; color:var(--text-secondary); white-space:nowrap; display:flex; align-items:center; gap:4px;">⏱ <input type="text" class="form-select tb-ts-input" value="${firstTs}" style="width:50px; padding:2px; font-size:0.72rem; height:20px;" onclick="event.stopPropagation()"></span>
 
                     ${vLink ? `<a href="${vLink}" target="_blank" style="font-size:0.72rem; color:var(--primary); text-decoration:none; background:var(--primary-light, rgba(79,70,229,0.1)); padding:3px 10px; border-radius:6px; white-space:nowrap;" onclick="event.stopPropagation()">🎥</a>` : ''}
 
@@ -9353,18 +9353,23 @@ window.addEventListener('unhandledrejection', function(e) {
         };
 
         async function saveFullTranscript() {
+            console.log('[TRANSCRIPT SAVE] saveFullTranscript called');
+            console.log('[TRANSCRIPT SAVE] transcriptEditorLesson=', transcriptEditorLesson ? `${transcriptEditorLesson.subject} lesson ${transcriptEditorLesson.lessonNum}` : 'NULL');
 
-            if (!transcriptEditorLesson) return;
+            if (!transcriptEditorLesson) {
+                showNotification('❌ Erreur: aucun transcript en cours d\'édition', 'error');
+                return;
+            }
 
             const saveBtn = document.getElementById('save-transcript-btn');
 
             if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ جاري الحفظ...'; }
 
             const origSegments = JSON.parse(JSON.stringify(transcriptEditorLesson.segments || []));
+            console.log('[TRANSCRIPT SAVE] origSegments count:', origSegments.length);
 
             const sections = document.querySelectorAll('.transcript-block-section');
-
-            
+            console.log('[TRANSCRIPT SAVE] sections found:', sections.length);
 
             const newThematicBlocks = [];
 
@@ -9388,17 +9393,28 @@ window.addEventListener('unhandledrejection', function(e) {
 
                 const newText  = ta.value.trim();
 
-                const firstSec = parseFloat(ta.dataset.firstSec) || 0;
+                let firstSec = parseFloat(ta.dataset.firstSec) || 0;
 
                 const lastSec  = parseFloat(ta.dataset.lastSec)  || firstSec;
 
                 const vLink    = ta.dataset.videoLink || '';
 
-                const firstTs  = ta.dataset.firstTs || '0:00';
-
+                let firstTs  = ta.dataset.firstTs || '0:00';
                 
+                const tsInput = section.querySelector('.tb-ts-input');
+                if (tsInput) {
+                    firstTs = tsInput.value.trim();
+                    const parts = firstTs.split(':');
+                    if (parts.length === 2) {
+                        firstSec = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+                    } else if (parts.length === 3) {
+                        firstSec = parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
+                    }
+                }
 
-                // Construct thematic block
+                console.log('[TRANSCRIPT SAVE] section blockId=', ta.dataset.blockId, 'segIdxs=', segIdxs, 'textLen=', newText.length);
+
+                // Construct thematic block — always capture the text as search_text
 
                 if (ta.dataset.blockId !== 'intro') {
 
@@ -9420,7 +9436,9 @@ window.addEventListener('unhandledrejection', function(e) {
 
                         video_link: vLink,
 
-                        is_sub_theme: subCheckbox ? subCheckbox.checked : false
+                        is_sub_theme: subCheckbox ? subCheckbox.checked : false,
+
+                        search_text: newText
 
                     });
 
@@ -9428,7 +9446,24 @@ window.addEventListener('unhandledrejection', function(e) {
 
                 const count = segIdxs.length;
 
-                if (!count) return;
+                if (!count) {
+                    // No segments mapped — create virtual segments from the typed text
+                    // so the liseuse can display this block's content
+                    if (newText.trim()) {
+                        const sentences = smartSplitSentences(newText);
+                        sentences.forEach((sentence, i) => {
+                            if (!sentence.trim()) return;
+                            const sec = firstSec + i * 4;
+                            origSegments.push({
+                                ts: secToTs(sec),
+                                sec: sec,
+                                text: sentence.trim(),
+                                video_link: vLink ? rebuildVideoLink(vLink, sec) : ''
+                            });
+                        });
+                    }
+                    return;
+                }
 
                 const sentences = smartSplitSentences(newText);
 
@@ -9459,6 +9494,9 @@ window.addEventListener('unhandledrejection', function(e) {
             });
 
             const cleanedSegments = origSegments.filter(s => (s.text || '').trim() !== '');
+            console.log('[TRANSCRIPT SAVE] cleanedSegments count:', cleanedSegments.length);
+            console.log('[TRANSCRIPT SAVE] newThematicBlocks count:', newThematicBlocks.length);
+            console.log('[TRANSCRIPT SAVE] Sending to server: subject=', transcriptEditorLesson.subject, 'lessonNum=', transcriptEditorLesson.lessonNum, 'userId=', state.userId);
 
             try {
 
@@ -9485,6 +9523,7 @@ window.addEventListener('unhandledrejection', function(e) {
                 });
 
                 const result = await resp.json();
+                console.log('[TRANSCRIPT SAVE] Server response:', result);
 
                 if (result.success) {
 
@@ -9511,14 +9550,14 @@ window.addEventListener('unhandledrejection', function(e) {
                     closeTranscriptDrawer();
 
                 } else {
-
+                    console.error('[TRANSCRIPT SAVE] Server error:', result.error);
                     showNotification('❌ خطأ: ' + (result.error || 'فشل الحفظ'), 'error');
 
                 }
 
             } catch(e) {
-
-                showNotification('❌ خطأ في الاتصال بالخادم', 'error');
+                console.error('[TRANSCRIPT SAVE] Network error:', e);
+                showNotification('❌ خطأ في الاتصال بالخادم: ' + e.message, 'error');
 
             } finally {
 
@@ -9527,6 +9566,7 @@ window.addEventListener('unhandledrejection', function(e) {
             }
 
         }
+
 
         // Split text on Arabic/Latin sentence boundaries
 
@@ -11587,7 +11627,9 @@ window.addEventListener('unhandledrejection', function(e) {
                     explanation: b.explanation || '',
                     video_link: b.video_link || '',
                     poetry_verses: b.poetry_verses || '',
-                    search_text: rawSegText || b.search_text || ''
+                    search_text: rawSegText || b.search_text || '',
+                    timestamp: b.timestamp || '',
+                    start_seconds: startSec
                 };
             });
 
@@ -11649,6 +11691,43 @@ window.addEventListener('unhandledrejection', function(e) {
             });
         }
 
+        window.updateChronoFromInputs = function() {
+            if (!currentAxesEditing) return;
+            const mmInput = document.getElementById('chrono-mm');
+            const ssInput = document.getElementById('chrono-ss');
+            if (mmInput && ssInput) {
+                let m = mmInput.value || "0";
+                let s = ssInput.value || "0";
+                // Pad seconds
+                if (s.length === 1) s = "0" + s;
+                currentAxesEditing.blocks[activeAxisIdx].timestamp = `${m}:${s}`;
+                window.updateLiveStudentPreview();
+            }
+        };
+
+        window.wrapSelectionInPoetry = function() {
+            const txtArea = document.getElementById('axis-transcription-editor');
+            if (!txtArea || !currentAxesEditing) return;
+
+            const start = txtArea.selectionStart;
+            const end = txtArea.selectionEnd;
+            if (start === end) {
+                showToast("⚠️ الرجاء تحديد النص أولاً لتغليفه", "error");
+                return;
+            }
+
+            const text = txtArea.value;
+            const selectedText = text.substring(start, end);
+            
+            // Reconstruct text with tags
+            const newText = text.substring(0, start) + `\n[POEME] ${selectedText.trim()} [/POEME]\n` + text.substring(end);
+            txtArea.value = newText;
+            currentAxesEditing.blocks[activeAxisIdx].search_text = newText;
+            
+            window.updateLiveStudentPreview();
+            showToast("📜 تم إضافة علامات الشعر بنجاح (يمكنك إضافة رقم للبيت: [POEME:45])", "success");
+        };
+
         window.loadActiveAxis = function() {
             const editorPanel = document.getElementById('axes-editor-panel-container');
             if (!editorPanel) return;
@@ -11665,15 +11744,34 @@ window.addEventListener('unhandledrejection', function(e) {
             }
 
             const block = currentAxesEditing.blocks[activeAxisIdx];
-            editorPanel.innerHTML = `
-                <div class="editor-card">
-                    <div class="editor-card-title">📌 عنوان المحور</div>
-                    <input type="text" class="axes-input" value="${escapeHtml(block.title)}" placeholder="اكتب عنوان المحور هنا..." oninput="currentAxesEditing.blocks[activeAxisIdx].title = this.value; window.updateAxisSidebarTitle(activeAxisIdx); window.updateLiveStudentPreview();">
-                </div>
+            let mm = '';
+            let ss = '';
+            if (block.timestamp) {
+                const parts = block.timestamp.trim().split(':');
+                if (parts.length === 2) {
+                    mm = parts[0];
+                    ss = parts[1];
+                } else if (parts.length === 3) {
+                    mm = (parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10)).toString();
+                    ss = parts[2];
+                }
+            }
 
-                <div class="editor-card">
-                    <div class="editor-card-title">🎥 رابط الفيديو (مع أو بدون وسم زمني)</div>
-                    <input type="text" class="axes-input" style="font-family: monospace; font-size: 0.95rem; font-weight: normal; direction: ltr; text-align: left;" value="${escapeHtml(block.video_link || '')}" placeholder="https://www.youtube.com/watch?v=..." oninput="currentAxesEditing.blocks[activeAxisIdx].video_link = this.value; window.updateLiveStudentPreview();">
+            editorPanel.innerHTML = `
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div class="editor-card" style="flex: 1; min-width: 250px; margin-bottom: 0;">
+                        <div class="editor-card-title">📌 عنوان المحور</div>
+                        <input type="text" class="axes-input" value="${escapeHtml(block.title)}" placeholder="اكتب عنوان المحور هنا..." oninput="currentAxesEditing.blocks[activeAxisIdx].title = this.value; window.updateAxisSidebarTitle(activeAxisIdx); window.updateLiveStudentPreview();">
+                    </div>
+
+                    <div class="editor-card" style="min-width: 200px; margin-bottom: 0;">
+                        <div class="editor-card-title">⏱ الكرونو (بداية المحور)</div>
+                        <div style="display: flex; gap: 8px; align-items: center; justify-content: center; background: var(--bg-primary); padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <input type="number" id="chrono-mm" class="axes-input" value="${mm}" style="width: 60px; text-align: center; font-family: monospace; padding: 5px; margin: 0; background: transparent; border: none; font-size: 1.1rem;" placeholder="دقيقة" min="0" max="180" oninput="window.updateChronoFromInputs()">
+                            <span style="font-weight: bold; color: var(--text-secondary);">:</span>
+                            <input type="number" id="chrono-ss" class="axes-input" value="${ss}" style="width: 60px; text-align: center; font-family: monospace; padding: 5px; margin: 0; background: transparent; border: none; font-size: 1.1rem;" placeholder="ثانية" min="0" max="59" oninput="window.updateChronoFromInputs()">
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Helper Toolbar -->
@@ -11682,7 +11780,7 @@ window.addEventListener('unhandledrejection', function(e) {
                     <button class="axes-toolbar-btn" onclick="window.moveSelectionToPrev()" title="نقل النص المحدد إلى نهاية المحور السابق">➡️ السابق</button>
                     <button class="axes-toolbar-btn" onclick="window.moveSelectionToNext()" title="نقل النص المحدد إلى بداية المحور التالي">⬅️ التالي</button>
                     <button class="axes-toolbar-btn" onclick="window.splitAxisAtSelection()" title="تقسيم المحور عند تحديد النص أو موقع المؤشر">✂️ تقسيم المحور</button>
-                    <button class="axes-toolbar-btn" onclick="window.moveSelectionToPoetry()" title="تحويل النص المحدد إلى أبيات شعرية">📜 إرسال للشعر</button>
+                    <button class="axes-toolbar-btn" onclick="window.wrapSelectionInPoetry()" title="تغليف النص المحدد بعلامات الشعر">📜 وسم كشعر</button>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; flex: 1; min-height: 400px; margin-bottom: 20px;">
@@ -11699,9 +11797,9 @@ window.addEventListener('unhandledrejection', function(e) {
                             <textarea id="axis-explanation-editor" class="axes-textarea" style="flex: 1; min-height: 100px;" placeholder="اكتب الشرح التوضيحي للمحور هنا..." oninput="currentAxesEditing.blocks[activeAxisIdx].explanation = this.value; window.updateLiveStudentPreview();">${escapeHtml(block.explanation || '')}</textarea>
                         </div>
 
-                        <div class="editor-card gold-tint" style="flex: 1; display: flex; flex-direction: column;">
-                            <div class="editor-card-title">📜 أبيات الشعر / السيرة (تنسيق ممركز)</div>
-                            <textarea id="axis-poetry-editor" class="axes-textarea" style="flex: 1; text-align: center; font-style: italic; min-height: 100px;" placeholder="أدخل أبيات الشعر هنا (كل بيت في سطر منفصل)..." oninput="currentAxesEditing.blocks[activeAxisIdx].poetry_verses = this.value; window.updateLiveStudentPreview();">${escapeHtml(block.poetry_verses || '')}</textarea>
+                        <div class="editor-card gold-tint" style="flex: 1; display: flex; flex-direction: column; background: rgba(0,0,0,0.02);">
+                            <div class="editor-card-title">📜 الأبيات المكتشفة تلقائياً (للمعاينة فقط)</div>
+                            <textarea id="axis-poetry-editor" class="axes-textarea" style="flex: 1; text-align: center; font-style: italic; min-height: 100px; cursor: not-allowed; opacity: 0.8;" readonly placeholder="سيظهر هنا الشعر المكتشف من نص التفريغ تلقائياً..."></textarea>
                         </div>
                     </div>
                 </div>
@@ -11732,9 +11830,10 @@ window.addEventListener('unhandledrejection', function(e) {
             const newAx = {
                 title: 'محور جديد',
                 explanation: '',
-                video_link: '',
                 poetry_verses: '',
-                search_text: ''
+                search_text: '',
+                timestamp: '',
+                start_seconds: 0
             };
             currentAxesEditing.blocks.splice(activeAxisIdx + 1, 0, newAx);
             activeAxisIdx = activeAxisIdx + 1;
@@ -11857,9 +11956,10 @@ window.addEventListener('unhandledrejection', function(e) {
             const newAx = {
                 title: `${currentAxesEditing.blocks[activeAxisIdx].title || 'المحور'} (تابع)`,
                 explanation: '',
-                video_link: currentAxesEditing.blocks[activeAxisIdx].video_link || '',
                 poetry_verses: '',
-                search_text: splitText
+                search_text: splitText,
+                timestamp: '',
+                start_seconds: 0
             };
 
             currentAxesEditing.blocks.splice(activeAxisIdx + 1, 0, newAx);
@@ -11895,15 +11995,33 @@ window.addEventListener('unhandledrejection', function(e) {
         };
 
         window.saveAxesChanges = async function() {
-            if (!currentAxesEditing) return;
+            console.log('[SAVE] saveAxesChanges called, currentAxesEditing=', currentAxesEditing);
+            if (!currentAxesEditing) {
+                showToast("❌ Erreur: aucun cours en cours d'édition", "error");
+                return;
+            }
 
-            // Validate that all blocks have titles
+            // Warn about missing titles but do NOT block the save
             for (let i = 0; i < currentAxesEditing.blocks.length; i++) {
-                if (!currentAxesEditing.blocks[i].title.trim()) {
-                    showToast(`⚠️ يرجى إدخال عنوان للمحور رقم ${i + 1}`, "error");
-                    return;
+                if (!currentAxesEditing.blocks[i].title || !currentAxesEditing.blocks[i].title.trim()) {
+                    currentAxesEditing.blocks[i].title = `محور ${i + 1}`;
+                    showToast(`⚠️ محور رقم ${i + 1} لا يحتوي على عنوان، تم تعيين عنوان تلقائي`, "warning");
+                }
+                
+                // Parse timestamp back to start_seconds
+                const ts = currentAxesEditing.blocks[i].timestamp;
+                if (ts) {
+                    const parts = ts.trim().split(':');
+                    if (parts.length === 2) {
+                        currentAxesEditing.blocks[i].start_seconds = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+                    } else if (parts.length === 3) {
+                        currentAxesEditing.blocks[i].start_seconds = parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
+                    }
                 }
             }
+
+            console.log('[SAVE] Blocks to save:', JSON.stringify(currentAxesEditing.blocks).substring(0, 200));
+            console.log('[SAVE] subject:', currentAxesEditing.subject, 'lessonNum:', currentAxesEditing.lessonNum, 'userId:', state.userId);
 
             const saveBtn = document.getElementById('save-axes-btn');
             if (saveBtn) {
@@ -11912,40 +12030,39 @@ window.addEventListener('unhandledrejection', function(e) {
             }
 
             try {
+                const payload = {
+                    userId: state.userId,
+                    subject: currentAxesEditing.subject,
+                    lessonNum: currentAxesEditing.lessonNum,
+                    thematicBlocks: currentAxesEditing.blocks
+                };
+                console.log('[SAVE] Sending payload to /admin/save-thematic-blocks...');
                 const res = await fetch('/admin/save-thematic-blocks', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: state.userId,
-                        subject: currentAxesEditing.subject,
-                        lessonNum: currentAxesEditing.lessonNum,
-                        thematicBlocks: currentAxesEditing.blocks
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await res.json();
+                console.log('[SAVE] Response:', data);
                 if (data.success) {
                     showToast("✅ تم حفظ وتحديث كافة المحاور بنجاح ومزامنتها للإنتاج وقاعدة البيانات", "success");
                     
-                    // Sync locally
+                    // Sync locally in state so the rest of the UI reflects the new data
                     const lesson = state.transcripts.find(l => l.subject === currentAxesEditing.subject && parseInt(l.lessonNum) === currentAxesEditing.lessonNum);
                     if (lesson) {
-                        lesson.thematic_blocks = currentAxesEditing.blocks;
+                        lesson.thematic_blocks = JSON.parse(JSON.stringify(currentAxesEditing.blocks));
                     }
 
+                    // DO NOT call location.reload() — it wipes all state.
+                    // Just close the editor; the user stays on the same page with updated local state.
                     window.closeAxesEditor();
-                    
-                    // Refresh view
-                    if (typeof filterLessons === 'function') {
-                        filterLessons();
-                    } else {
-                        location.reload();
-                    }
                 } else {
+                    console.error('[SAVE] Backend returned error:', data.error);
                     showToast(`❌ حدث خطأ أثناء حفظ التعديلات: ${data.error}`, "error");
                 }
             } catch (err) {
-                console.error("Error saving thematic blocks:", err);
+                console.error("[SAVE] Network/JS error saving thematic blocks:", err);
                 showToast(`❌ فشل الاتصال بالخادم لحفظ البيانات: ${err.message}`, "error");
             } finally {
                 if (saveBtn) {
@@ -11954,6 +12071,7 @@ window.addEventListener('unhandledrejection', function(e) {
                 }
             }
         };
+
 
 
         window.toggleFullTranscriptPanel = function() {
@@ -12029,10 +12147,27 @@ window.addEventListener('unhandledrejection', function(e) {
 
             const escapedTitle = escapeHtml(block.title || 'عنوان المحور');
             const escapedExpl = escapeHtml(block.explanation || 'لا يوجد شرح لهذا المحور حتى الآن. اكتب شرحاً في الأعلى للمعاينة...');
-            const escapedPoetry = escapeHtml(block.poetry_verses || '');
             const escapedSearchText = escapeHtml(block.search_text || 'لا يوجد نص تفريغ لهذا المحور...');
-            const hasPoetry = escapedPoetry.trim().length > 0;
             
+            // Auto-extract poetry
+            let extractedPoetry = "";
+            if (block.search_text) {
+                const tagRegex = /\[POEME(?::(\d+))?\](.*?)\[\/POEME\]/gs;
+                let match;
+                while ((match = tagRegex.exec(block.search_text)) !== null) {
+                    const num = match[1] ? `[بيت ${match[1]}] ` : '';
+                    extractedPoetry += num + match[2].trim() + '\n';
+                }
+            }
+            
+            const poetryEditor = document.getElementById('axis-poetry-editor');
+            if (poetryEditor) {
+                poetryEditor.value = extractedPoetry;
+            }
+            
+            const escapedPoetry = escapeHtml(extractedPoetry);
+            const hasPoetry = escapedPoetry.trim().length > 0;
+
             // Get timestamp from video url or default
             let timestamp = '0:00';
             if (block.video_link) {
