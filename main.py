@@ -987,7 +987,6 @@ async def save_lesson_axes(request):
                 # Sync to database: DELETE existing and INSERT/REPLACE all
                 try:
                     import database as db
-                    import re
                     import aiosqlite
                     from config import DATABASE_PATH
                     
@@ -1018,13 +1017,7 @@ async def save_lesson_axes(request):
                     with open(prod_transcripts, 'w', encoding='utf-8') as pf:
                         json.dump(lessons, pf, ensure_ascii=False, indent=4)
                         
-                    try:
-                        import subprocess
-                        subprocess.run(["git", "add", "transcripts.json"], cwd="C:/Users/Houssam/Desktop/telegram-dashboard", check=True)
-                        subprocess.run(["git", "commit", "-m", f"[Backup Bot] Admin save thematic blocks {subject} course {lesson_num}"], cwd="C:/Users/Houssam/Desktop/telegram-dashboard", check=True)
-                        subprocess.run(["git", "push", "origin", "main"], cwd="C:/Users/Houssam/Desktop/telegram-dashboard", check=True)
-                    except Exception as git_err:
-                        logger.error(f"Git push failed in save_lesson_axes: {git_err}")
+                    pass
                         
                 return web.json_response({"success": True})
             else:
@@ -1455,7 +1448,6 @@ async def save_full_transcript(request):
                     import database as db
                     from config import DATABASE_PATH
                     import aiosqlite
-                    import re
                     async with aiosqlite.connect(DATABASE_PATH) as conn:
                         await conn.execute("DELETE FROM course_chapters WHERE subject = ? AND course_number = ?", (subject.lower().strip(), int(lesson_num)))
                         await conn.commit()
@@ -1484,14 +1476,7 @@ async def save_full_transcript(request):
                     with open(prod_transcripts, 'w', encoding='utf-8') as pf:
                         json.dump(lessons, pf, ensure_ascii=False, indent=4)
                         
-                    # Optional Git auto push
-                    try:
-                        import subprocess
-                        subprocess.run(["git", "add", "transcripts.json"], cwd="C:/Users/Houssam/Desktop/telegram-dashboard", check=True)
-                        subprocess.run(["git", "commit", "-m", f"[Backup Bot] Admin edit full transcript {subject} course {lesson_num}"], cwd="C:/Users/Houssam/Desktop/telegram-dashboard", check=True)
-                        subprocess.run(["git", "push", "origin", "main"], cwd="C:/Users/Houssam/Desktop/telegram-dashboard", check=True)
-                    except Exception as git_err:
-                        logger.error(f"Git auto-deploy failed: {git_err}")
+                    pass
                         
                 return web.json_response({"success": True})
                 
