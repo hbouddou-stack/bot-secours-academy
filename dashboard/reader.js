@@ -520,13 +520,8 @@ function initYouTubePlayer(videoId) {
             },
             events: {
                 'onReady': (e) => {
-                    if (pendingSeekTime !== null) {
-                        e.target.seekTo(pendingSeekTime, true);
-                        e.target.playVideo();
-                        pendingSeekTime = null;
-                    } else {
-                        e.target.playVideo();
-                    }
+                    e.target.playVideo();
+                    pendingSeekTime = null;
                 }
             }
         });
