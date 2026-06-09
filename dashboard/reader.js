@@ -11,6 +11,32 @@ let syllabusCompletion = JSON.parse(localStorage.getItem('academy_syllabus_compl
 let syllabusMode = 'grid';
 let isSeekingTab = false;
 
+function playCompletionSound() {
+    try {
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+        }
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); 
+        osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); 
+        
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+    } catch(e) {}
+}
+
 const SUBJECT_LABELS = {
     'sira': 'السيرة النبوية',
     'fiqh': 'الفقه',
@@ -336,7 +362,12 @@ function initUIControls() {
     });
 }
 
+let currentActiveSubjectData = null;
+let currentActiveSubjectColor = null;
+
 function buildSyllabusTab(transcripts) {
+    currentActiveSubjectData = null;
+    currentActiveSubjectColor = null;
     const subjectsMap = new Map();
     transcripts.forEach(t => {
         if (!subjectsMap.has(t.subject)) {
@@ -444,6 +475,8 @@ function buildSyllabusTab(transcripts) {
 }
 
 function openSubjectDetail(data, colorClass) {
+    currentActiveSubjectData = data;
+    currentActiveSubjectColor = colorClass;
     const listContainer = document.getElementById('subjects-list');
     listContainer.innerHTML = '';
     
@@ -467,25 +500,47 @@ function openSubjectDetail(data, colorClass) {
             });
         } else {
             total = 1;
-            // No easy generic completion for now, assume 0
         }
         let p = total > 0 ? (comp / total) * 100 : 0;
         let deg = (p / 100) * 360;
+        const isComplete = comp > 0 && comp === total;
         
-        const btn = document.createElement('button');
-        btn.className = `smart-lesson-btn ${colorClass} ${p === 100 ? 'completed' : ''}`;
+        const card = document.createElement('div');
+        card.className = `lesson-card ${isComplete ? 'completed' : ''}`;
         
-        btn.innerHTML = `
-            <div class="ring" style="background: conic-gradient(var(--subject-color, var(--primary, var(--accent-color))) ${deg}deg, var(--surface-2) 0deg);">
-                <div class="inner">${l.lessonNum}</div>
+        let badgeHtml = '';
+        if (total > 0) {
+            if (isComplete) {
+                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--success, #10b981); background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; line-height: 1.2;">✅ ${comp}/${total} محاور</div>`;
+            } else if (comp > 0) {
+                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--subject-color, var(--primary)); background: rgba(0, 0, 0, 0.05); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; line-height: 1.2;">▶️ ${comp}/${total} محاور</div>`;
+            } else {
+                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--text-3); background: rgba(0, 0, 0, 0.05); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; line-height: 1.2;">${total} محاور</div>`;
+            }
+        }
+
+        let ringStyle = isComplete 
+            ? `background: var(--subject-color, var(--primary));` 
+            : `background: conic-gradient(var(--subject-color, var(--primary)) ${deg}deg, var(--bg-color, var(--surface)) 0deg);`;
+
+        let lessonTitleStr = l.title ? l.title : `الدرس ${l.lessonNum}`;
+
+        card.innerHTML = `
+            <div class="lesson-circle">
+                <div class="progress-ring" style="${ringStyle}">
+                    <div class="progress-ring-inner">${l.lessonNum}</div>
+                </div>
             </div>
-            <div class="lesson-title-label">الدرس ${l.lessonNum}</div>
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+                <div class="lesson-title" style="margin-bottom: 2px; line-height: 1.2;">${lessonTitleStr}</div>
+                ${badgeHtml}
+            </div>
         `;
         
-        btn.onclick = () => {
+        card.onclick = () => {
             openLessonPreview(l);
         };
-        grid.appendChild(btn);
+        grid.appendChild(card);
     });
     
     listContainer.appendChild(grid);
@@ -1549,7 +1604,15 @@ function toggleChapterCompletion(event, subject, lessonNum, chapterIdx) {
     
     // Only re-render the list view to show checks
     if(syllabusMode === 'list') {
-        buildSyllabusTab(DB);
+        if (currentActiveSubjectData) {
+            openSubjectDetail(currentActiveSubjectData, currentActiveSubjectColor);
+        } else {
+            buildSyllabusTab(DB);
+        }
+    }
+    
+    if (syllabusCompletion[key]) {
+        playCompletionSound();
     }
 }
 
@@ -1933,6 +1996,14 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSpeedUI();
 });
 
+function startLessonFromChapter(subject, lessonNum, startSec) {
+    const found = DB.find(t => t.lessonNum == lessonNum && t.subject === subject);
+    if (!found) return;
+    closeLessonPreview();
+    switchTab('reader');
+    loadLesson(lessonNum, subject, startSec);
+}
+
 function openLessonPreview(l) {
     const sheet = document.getElementById('lesson-preview-sheet');
     const overlay = document.getElementById('lesson-preview-overlay');
@@ -1940,17 +2011,27 @@ function openLessonPreview(l) {
     const list = document.getElementById('lesson-preview-list');
     const startBtn = document.getElementById('start-reading-btn');
 
-    title.textContent = 'الدرس ' + l.lessonNum + ' - ' + (l.subjectLabel || l.subject);
+    title.textContent = 'الدرس ' + l.lessonNum + ' - ' + (l.title || l.subjectLabel || l.subject);
 
     let html = '';
+    let firstUnreadIdx = 0;
+    let totalCompleted = 0;
+    
     if (l.thematic_blocks && l.thematic_blocks.length > 0) {
+        firstUnreadIdx = l.thematic_blocks.findIndex((b, idx) => {
+            return !syllabusCompletion[l.subject + '_' + l.lessonNum + '_' + idx];
+        });
+        if (firstUnreadIdx === -1) firstUnreadIdx = 0;
+        
         l.thematic_blocks.forEach((b, idx) => {
             const key = l.subject + '_' + l.lessonNum + '_' + idx;
             const isComp = !!syllabusCompletion[key];
-            html += `<div class="preview-chapter-item" onclick="togglePreviewChapter(event, '${l.subject}', ${l.lessonNum}, ${idx}, this)">
-                <div class="preview-checkbox ${isComp ? 'checked' : ''}">${isComp ? '✓' : ''}</div>
-                <div class="preview-chapter-info" style="margin-right: 12px; text-align: right;">
-                    <div class="preview-chapter-title">${idx + 1}. ${b.title}</div>
+            if (isComp) totalCompleted++;
+            
+            html += `<div class="preview-chapter-item">
+                <div class="preview-checkbox ${isComp ? 'checked' : ''}" onclick="togglePreviewChapter(event, '${l.subject}', ${l.lessonNum}, ${idx}, this.parentElement)">${isComp ? '✓' : ''}</div>
+                <div class="preview-chapter-info" style="margin-right: 12px; text-align: right; cursor: pointer; flex: 1;" onclick="startLessonFromChapter('${l.subject}', ${l.lessonNum}, ${b.start_seconds})">
+                    <div class="preview-chapter-title" style="transition: color 0.2s;">${idx + 1}. ${b.title}</div>
                 </div>
             </div>`;
         });
@@ -1959,12 +2040,24 @@ function openLessonPreview(l) {
     }
     list.innerHTML = html;
 
+    if (l.thematic_blocks && l.thematic_blocks.length > 0) {
+        if (totalCompleted === 0) {
+            startBtn.innerHTML = `📖 ابدأ القراءة`;
+        } else if (totalCompleted === l.thematic_blocks.length) {
+            startBtn.innerHTML = `🔄 أعد قراءة الدرس`;
+        } else {
+            startBtn.innerHTML = `▶️ استئناف (المحور ${firstUnreadIdx + 1})`;
+        }
+    } else {
+        startBtn.innerHTML = `📖 ابدأ القراءة`;
+    }
+
     startBtn.onclick = () => {
         closeLessonPreview();
         switchTab('reader');
         let startSec = 0;
         if (l.thematic_blocks && l.thematic_blocks.length > 0) {
-            startSec = l.thematic_blocks[0].start_seconds;
+            startSec = l.thematic_blocks[firstUnreadIdx].start_seconds;
         }
         loadLesson(l.lessonNum, l.subject, startSec);
     };
@@ -1986,12 +2079,17 @@ function togglePreviewChapter(e, subject, lessonNum, chapterIdx, el) {
     localStorage.setItem('academy_syllabus_completions', JSON.stringify(syllabusCompletion));
 
     updateGlobalProgress();
-    buildSyllabusTab(DB);
+    if (currentActiveSubjectData) {
+        openSubjectDetail(currentActiveSubjectData, currentActiveSubjectColor);
+    } else {
+        buildSyllabusTab(DB);
+    }
 
     const cb = el.querySelector('.preview-checkbox');
     if (isComp) {
         cb.classList.add('checked');
         cb.textContent = '✓';
+        playCompletionSound();
     } else {
         cb.classList.remove('checked');
         cb.textContent = '';
