@@ -83,6 +83,29 @@
 
             <nav class="sidebar-menu">
 
+                <!-- SECTION 0: QUESTIONS DIRECTION -->
+                <div class="sidebar-section" id="section-questions">
+                    <div class="sidebar-section-header" onclick="toggleSidebarSection('section-questions')">
+                        <span class="section-icon">🧭</span>
+                        <span class="section-title">إدارة الأسئلة والمناهج</span>
+                        <span class="section-arrow">▼</span>
+                    </div>
+                    <div class="sidebar-section-content">
+                        <button id="btn-tab-questions" class="sidebar-btn" onclick="switchTab('questions')">
+                            <span class="btn-icon">🧩</span>
+                            <span class="btn-text">بنك الأسئلة</span>
+                        </button>
+                        <button id="btn-tab-curriculum" class="sidebar-btn" onclick="switchTab('curriculum')">
+                            <span class="btn-icon">🌳</span>
+                            <span class="btn-text">الهيكلة المنهجية</span>
+                        </button>
+                        <button id="btn-tab-mindmap" class="sidebar-btn" onclick="window.open('/admin_mindmap.html', '_blank')">
+                            <span class="btn-icon">🗺️</span>
+                            <span class="btn-text">الخارطة التفاعلية</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- SECTION 1: TICKETS -->
 
                 <div class="sidebar-section" id="section-inbox" >
@@ -150,14 +173,6 @@
                             <span class="btn-icon">📝</span>
 
                             <span class="btn-text">التفريغ</span>
-
-                        </button>
-
-                        <button id="btn-tab-questions" class="sidebar-btn" onclick="switchTab('questions')">
-
-                            <span class="btn-icon">🧩</span>
-
-                            <span class="btn-text">بنك الأسئلة</span>
 
                         </button>
 
@@ -728,6 +743,73 @@
 
         </section>
 
+        <!-- Tab Panel: CURRICULUM MAPPING -->
+        <section id="panel-curriculum" class="tab-panel">
+            <div class="header-actions" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+                <h1 class="page-title">🌳 الهيكلة المنهجية (Curriculum Mapping)</h1>
+                <div class="filter-group" style="display: flex; gap: 10px; align-items: center;">
+                    <button id="btn-show-sidepanel" class="btn btn-secondary" style="display: none;" onclick="document.getElementById('miller-side-panel').style.display='flex'; this.style.display='none';">🗂️ عرض اللوحة الجانبية</button>
+                    <select id="curriculum-year-filter" class="form-select" onchange="loadAdminThematics()">
+                        <option value="">كل السنوات</option>
+                        <option value="1445">السنة الأولى (1445)</option>
+                        <option value="1446">السنة الثانية (1446)</option>
+                        <option value="1447">السنة الثالثة (1447)</option>
+                        <option value="1448">السنة الرابعة (1448)</option>
+                    </select>
+                    <select id="curriculum-subject-filter" class="form-select" onchange="loadAdminThematics()">
+                        <option value="">كل المواد</option>
+                        <option value="aqeeda">العقيدة</option>
+                        <option value="fiqh">الفقه</option>
+                        <option value="sira">السيرة</option>
+                        <option value="nahw">النحو</option>
+                        <option value="tajweed">التجويد</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="addCurriculumNode(1, null)">➕ إضافة مجلد رئيسي</button>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 20px; height: calc(100vh - 200px);">
+                <!-- Miller Columns -->
+                <div id="miller-columns-container" class="miller-columns-container" style="flex: 1; display: flex; gap: 10px; overflow-x: auto;">
+                    <!-- Colonnes générées dynamiquement -->
+                </div>
+                <!-- Side Panel (Inbox & Preview) -->
+                <div id="miller-side-panel" class="miller-inbox" style="width: 400px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); display: flex; flex-direction: column;">
+                    
+                    <div style="padding: 10px 15px; border-bottom: 1px solid var(--border); background: var(--surface-hover); display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; gap: 10px;">
+                            <button id="btn-tab-miller-preview" class="btn btn-primary" style="padding: 4px 10px; font-size: 0.9rem;" onclick="switchMillerSideTab('preview')">👁️ المعاينة</button>
+                            <button id="btn-tab-miller-inbox" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.9rem;" onclick="switchMillerSideTab('inbox')">📥 غير المصنفة</button>
+                        </div>
+                        <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.8rem;" onclick="document.getElementById('miller-side-panel').style.display='none'; document.getElementById('btn-show-sidepanel').style.display='inline-block';">إخفاء</button>
+                    </div>
+
+                    <!-- Inbox Tab -->
+                    <div id="miller-tab-inbox" style="display: none; flex: 1; flex-direction: column;">
+                        <div style="padding: 10px 15px; border-bottom: 1px solid var(--border); background: var(--surface-hover);">
+                            <h3 style="margin: 0; font-size: 1rem; color: var(--text-primary);">📥 الأسئلة غير المصنفة</h3>
+                        </div>
+                        <div id="miller-inbox-list" class="miller-inbox-list" ondragover="allowDrop(event)" ondrop="dropQuestionToInbox(event)" style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 200px;">
+                            <!-- Questions orphelines générées dynamiquement -->
+                        </div>
+                    </div>
+
+                    <!-- Preview Tab -->
+                    <div id="miller-tab-preview" style="display: flex; flex: 1; flex-direction: column;">
+                        <div style="padding: 10px 15px; border-bottom: 1px solid var(--border); background: var(--surface-hover);">
+                            <h3 style="margin: 0; font-size: 1rem; color: var(--text-primary);" id="miller-preview-title">👁️ معاينة أسئلة المحور</h3>
+                        </div>
+                        <div id="miller-preview-list" style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 200px;">
+                            <div style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                                اضغط على أيقونة (👁️) بجوار أي محور فرعي لعرض أسئلته هنا.
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
         <!-- Tab Panel: TRANSCRIPTS -->
 
         <section id="panel-transcripts" class="tab-panel">
@@ -1285,7 +1367,9 @@
 
     </div>
 
-    <script src="admin.js?v=admin-settings-fix-20260601-1235"></script>
+    
+
+    <script src="admin.js?v=admin-final-fix-20260609-0230"></script>
 
     <!-- Advanced Hybrid Telegram Formatting Editor Modal -->    <!-- Advanced Thematic Axes Editor Dashboard Overlay -->
     <div id="axes-editor-overlay" class="axes-editor-overlay" style="display: none;">
@@ -1469,7 +1553,7 @@
 
     <!-- Custom View Modal (Phase 3 DB Integrated) -->
 
-    <script src="admin-late.js?v=admin-settings-fix-20260601-1235"></script>
+    <script src="admin-late.js?v=admin-final-fix-20260609-0230"></script>
 
     <!-- ─── Custom View Editor Modal (Phase 3) ─── -->
 

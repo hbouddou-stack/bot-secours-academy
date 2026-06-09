@@ -509,89 +509,77 @@ window.addEventListener('unhandledrejection', function(e) {
         });
 
         function detectUser() {
-
             try {
-
                 // Check URL parameters for state.userId bypass
-
                 const urlParams = new URLSearchParams(window.location.search);
-
                 const urlAdminId = urlParams.get('state.userId');
-
                 if (urlAdminId) {
-
                     state.userId = parseInt(urlAdminId);
-
+                    localStorage.setItem('admin_user_id', state.userId);
                     state.username = "admin_url";
-
                     state.firstName = "مشرف بالرابط";
-
                     document.getElementById('admin-name').textContent = state.firstName;
-
                     loadDashboardData();
-
                     return;
-
                 }
 
                 // Check if we are truly inside a Telegram WebApp (not just the SDK loaded)
-
                 const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-
                 if (user && user.id) {
-
                     state.userId = user.id;
-
+                    localStorage.setItem('admin_user_id', state.userId);
                     state.username = user.username || `user_${user.id}`;
-
                     state.firstName = user.first_name || "مشرف";
-
                     document.getElementById('admin-name').textContent = state.firstName;
-
                     loadDashboardData();
-
                 } else {
-
-                    // Not in Telegram — show manual login overlay
-
-                    document.getElementById('config-overlay').style.display = 'flex';
-
+                    // Not in Telegram — check localStorage first
+                    const savedId = localStorage.getItem('admin_user_id');
+                    if (savedId) {
+                        state.userId = parseInt(savedId);
+                        state.username = `admin_saved`;
+                        state.firstName = "مشرف محفوظ";
+                        document.getElementById('admin-name').textContent = state.firstName;
+                        if (document.getElementById('config-overlay')) {
+                            document.getElementById('config-overlay').style.display = 'none';
+                        }
+                        loadDashboardData();
+                    } else {
+                        // Not in Telegram — show manual login overlay
+                        document.getElementById('config-overlay').style.display = 'flex';
+                    }
                 }
-
             } catch(e) {
-
-                document.getElementById('config-overlay').style.display = 'flex';
-
+                const savedId = localStorage.getItem('admin_user_id');
+                if (savedId) {
+                    state.userId = parseInt(savedId);
+                    state.username = `admin_saved`;
+                    state.firstName = "مشرف محفوظ";
+                    document.getElementById('admin-name').textContent = state.firstName;
+                    if (document.getElementById('config-overlay')) {
+                        document.getElementById('config-overlay').style.display = 'none';
+                    }
+                    loadDashboardData();
+                } else {
+                    document.getElementById('config-overlay').style.display = 'flex';
+                }
             }
-
         }
 
         function submitManualUserId() {
-
             const input = document.getElementById('manual-user-id').value;
-
             if (!input) {
-
                 showToast("⚠️ يرجى إدخال معرف صحيح", "error");
-
                 return;
-
             }
-
             state.userId = parseInt(input);
-
+            localStorage.setItem('admin_user_id', state.userId);
             state.username = `admin_test`;
-
             state.firstName = "مشرف تجريبي";
-
             
-
             document.getElementById('config-overlay').style.display = 'none';
-
             document.getElementById('admin-name').textContent = state.firstName;
-
             loadDashboardData();
-
         }
 
         function arabicRoleLabel(role) {
@@ -10526,7 +10514,9 @@ window.addEventListener('unhandledrejection', function(e) {
 
                         chapterIdx: chapterIdx,
 
-                        content: contentText
+                        content: contentText,
+
+                        newText: contentText
 
                     })
 

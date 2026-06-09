@@ -197,7 +197,25 @@ async def handle_search(request):
 async def handle_transcripts(request):
     try:
         lessons = await load_lessons_from_db()
-        return web.json_response(lessons)
+        data = json.dumps(lessons, ensure_ascii=False)
+        
+        accept_encoding = request.headers.get('Accept-Encoding', '')
+        if 'gzip' in accept_encoding:
+            import gzip
+            compressed = gzip.compress(data.encode('utf-8'))
+            return web.Response(
+                body=compressed,
+                content_type='application/json',
+                headers={
+                    'Content-Encoding': 'gzip',
+                    'Content-Length': str(len(compressed))
+                }
+            )
+        else:
+            return web.Response(
+                text=data,
+                content_type='application/json'
+            )
     except Exception as e:
         logger.error(f"Error serving transcripts: {e}")
         return web.json_response({"error": str(e)}, status=500)
@@ -856,6 +874,8 @@ async def edit_course_chapter(request):
         chapter_idx = data.get('chapterIdx')
         new_title = data.get('newTitle')
         new_text = data.get('newText')
+        if new_text is None:
+            new_text = data.get('content')
         new_video_url = data.get('newVideoUrl')
         new_poetry = data.get('newPoetry')
         
