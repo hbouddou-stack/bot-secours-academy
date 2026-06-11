@@ -62,7 +62,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 20px;
+    padding: 8px 12px;
     background: var(--nav-bg);
     border-bottom: 1px solid var(--border-color);
     position: sticky;
@@ -86,7 +86,16 @@ body {
 
 .reader-controls {
     display: flex;
-    gap: 10px;
+    gap: 6px;
+    align-items: center;
+}
+
+.top-nav .control-btn {
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
 }
 
 .control-btn {

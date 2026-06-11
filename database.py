@@ -17,24 +17,8 @@ async def init_db():
     local_db = os.path.join(os.path.dirname(__file__), "backup_bot.db")
     if DATABASE_PATH != local_db and os.path.exists(local_db):
         should_copy = False
-        if not os.path.exists(DATABASE_PATH):
+        if not os.path.exists(DATABASE_PATH) or os.path.getsize(DATABASE_PATH) == 0:
             should_copy = True
-        else:
-            db_size = os.path.getsize(DATABASE_PATH)
-            if db_size < 3000000:  # If less than 3MB (our seeded DB is 3.9MB)
-                should_copy = True
-            else:
-                try:
-                    import sqlite3
-                    conn = sqlite3.connect(DATABASE_PATH)
-                    c = conn.cursor()
-                    c.execute("SELECT COUNT(*) FROM questions")
-                    cnt = c.fetchone()[0]
-                    conn.close()
-                    if cnt == 0:
-                        should_copy = True
-                except Exception:
-                    should_copy = True
                     
         if should_copy:
             try:
