@@ -4,6 +4,7 @@ let currentSubject = null;
 let currentLessonNum = null;
 let currentTabIndex = 0;
 let thematicData = []; // Array of objects { title, startTime, endTime, htmlContent, questions: [] }
+let isReadingMode = false;
 let DB = [];
 let wordIndex = [];
 let pendingSeekTime = null;
@@ -243,6 +244,61 @@ function updateDashboardProgress() {
 }
 
 function initUIControls() {
+
+    const btnSegVideo = document.getElementById('btn-seg-video');
+    const btnSegReading = document.getElementById('btn-seg-reading');
+    
+    function updateSegmentUI() {
+        if (isReadingMode) {
+            btnSegReading.style.background = 'var(--primary)';
+            btnSegReading.style.color = 'white';
+            btnSegVideo.style.background = 'transparent';
+            btnSegVideo.style.color = 'var(--text-secondary)';
+        } else {
+            btnSegVideo.style.background = 'var(--primary)';
+            btnSegVideo.style.color = 'white';
+            btnSegReading.style.background = 'transparent';
+            btnSegReading.style.color = 'var(--text-secondary)';
+        }
+        
+        // Hide/Show Sticky Pin and Video Speed
+        const btnSticky = document.getElementById('btn-sticky-toggle');
+        const btnSpeed = document.getElementById('btn-speed-toggle');
+        const progTracker = document.getElementById('progress-tracker-dots');
+        
+        if (btnSticky) btnSticky.style.display = isReadingMode ? 'none' : 'inline-block';
+        if (btnSpeed) btnSpeed.style.display = isReadingMode ? 'none' : 'inline-block';
+        if (progTracker) progTracker.style.visibility = isReadingMode ? 'hidden' : 'visible'; // Keep space but hide dots
+    }
+    
+    if (btnSegVideo && btnSegReading) {
+        btnSegVideo.addEventListener('click', () => {
+            if (!isReadingMode) return;
+            isReadingMode = false;
+            updateSegmentUI();
+            if (currentLessonData) {
+                prepareThematicData(currentLessonData);
+                renderTabs();
+                switchThemeTab(currentTabIndex, !isReadingMode);
+            }
+        });
+        
+        btnSegReading.addEventListener('click', () => {
+            if (isReadingMode) return;
+            isReadingMode = true;
+            updateSegmentUI();
+            if (currentLessonData) {
+                prepareThematicData(currentLessonData);
+                renderTabs();
+                switchThemeTab(currentTabIndex, !isReadingMode);
+            }
+        });
+        
+        // Initialize
+        updateSegmentUI();
+    }
+
+
     // Sticky Video Toggle Logic
     const btnSticky = document.getElementById('btn-sticky-toggle');
     const videoWrapper = document.getElementById('video-wrapper');
@@ -328,251 +384,7 @@ function initUIControls() {
         });
     }
     
-    // ZEN MODE LOGIC
-    const zenBtn = document.getElementById('btn-zen-toggle');
-    if (zenBtn) {
-        zenBtn.addEventListener('click', () => {
-            document.body.classList.toggle('zen-mode');
-            if (document.body.classList.contains('zen-mode')) {
-                zenBtn.style.color = 'var(--primary, var(--accent-color))';
-                // Block auto-scroll completely in zen mode
-                lastUserScrollTime = Date.now() + 999999999;
-            } else {
-                zenBtn.style.color = '';
-                // Re-enable auto-scroll with a 5s grace period
-                lastUserScrollTime = Date.now();
-            }
-        });
-    }
-
-    document.getElementById('btn-text-plus').addEventListener('click', () => {
-        if(fontSizeBase < 30) {
-            fontSizeBase += 2;
-            document.documentElement.style.setProperty('--font-size-base', fontSizeBase + 'px');
-            localStorage.setItem('readerFontSize', fontSizeBase);
-        }
-    });
-
-    document.getElementById('btn-text-minus').addEventListener('click', () => {
-        if(fontSizeBase > 14) {
-            fontSizeBase -= 2;
-            document.documentElement.style.setProperty('--font-size-base', fontSizeBase + 'px');
-            localStorage.setItem('readerFontSize', fontSizeBase);
-        }
-    });
-}
-
-let currentActiveSubjectData = null;
-let currentActiveSubjectColor = null;
-
-function buildSyllabusTab(transcripts) {
-    currentActiveSubjectData = null;
-    currentActiveSubjectColor = null;
-    const subjectsMap = new Map();
-    transcripts.forEach(t => {
-        if (!subjectsMap.has(t.subject)) {
-            subjectsMap.set(t.subject, {
-                label: t.subjectLabel || t.subject,
-                lessons: []
-            });
-        }
-        subjectsMap.get(t.subject).lessons.push(t);
-    });
-
-    const listContainer = document.getElementById('subjects-list');
-    if (!listContainer) return;
-    listContainer.innerHTML = '';
-
-    subjectsMap.forEach((data, subjectKey) => {
-        data.lessons.sort((a,b) => a.lessonNum - b.lessonNum);
-        
-        let colorClass = 'subject-default';
-        if (subjectKey.includes('sira') || subjectKey.includes('sirah')) colorClass = 'subject-sira';
-        else if (subjectKey.includes('fiqh')) colorClass = 'subject-fiqh';
-        else if (subjectKey.includes('tahawi') || subjectKey.includes('aqida') || subjectKey.includes('aqeeda')) colorClass = 'subject-tahawi';
-        else if (subjectKey.includes('adab') || subjectKey.includes('nahw')) colorClass = 'subject-adab';
-        else colorClass = 'subject-sira';
-        
-        // Calculate completion
-        let totalBlocks = 0;
-        let completedBlocks = 0;
-        data.lessons.forEach(l => {
-            if (l.thematic_blocks && l.thematic_blocks.length) {
-                l.thematic_blocks.forEach((b, idx) => {
-                    totalBlocks++;
-                    if (syllabusCompletion[`${l.subject}_${l.lessonNum}_${idx}`]) {
-                        completedBlocks++;
-                    }
-                });
-            } else {
-                totalBlocks++;
-            }
-        });
-        let progressPercent = totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0;
-        let deg = (progressPercent / 100) * 360;
-        
-        if (syllabusMode === 'grid') {
-            // IDEA 3: Dashboard Cards
-            const card = document.createElement('div');
-            card.className = `subject-dashboard-card ${colorClass}`;
-            card.innerHTML = `
-                <div class="card-info">
-                    <h3>${data.label}</h3>
-                    <p style="margin-bottom: 4px; font-weight: 600; color: var(--subject-color, var(--primary));">الدروس: ${data.lessons.length}</p>
-                    <p style="color: var(--text-2); font-size: 13px;">المحاور المنجزة: ${completedBlocks}/${totalBlocks}</p>
-                </div>
-                <div class="card-progress">
-                    <div class="circular-progress-wrap" style="background: conic-gradient(var(--subject-color, var(--primary, var(--accent-color))) ${deg}deg, var(--surface-2) 0deg);">
-                        <span>${progressPercent}%</span>
-                    </div>
-                </div>
-            `;
-            
-            card.onclick = () => {
-                openSubjectDetail(data, colorClass);
-            };
-            
-            listContainer.appendChild(card);
-        } else {
-            // Mode Programme (List) - Old Accordion
-            const subjHeader = document.createElement('div');
-            subjHeader.className = 'subject-header';
-            subjHeader.innerHTML = `<h3>${data.label}</h3><span class="chev">▼</span>`;
-            
-            const subjContent = document.createElement('div');
-            subjContent.className = 'subject-content subject-list';
-            
-            data.lessons.forEach(l => {
-                let html = `<div style="background:var(--bg); border-radius:12px; margin-bottom:10px; overflow:hidden;">
-                    <div style="padding:12px; background:var(--surface); border-bottom:1px solid var(--border-color); font-weight:bold; display:flex; justify-content:space-between; align-items:center;" onclick="openLessonFromList('${l.subject}', ${l.lessonNum})">
-                        <span>الدرس ${l.lessonNum} - ${l.title || ''}</span>
-                    </div>
-                    <div style="padding:10px;">`;
-                
-                if (l.thematic_blocks && l.thematic_blocks.length) {
-                    l.thematic_blocks.forEach((b, idx) => {
-                        const compKey = `${l.subject}_${l.lessonNum}_${idx}`;
-                        const isComp = !!syllabusCompletion[compKey];
-                        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; background:white; margin-bottom:6px; border-radius:8px; border:1px solid ${isComp ? 'var(--primary)' : 'var(--border-color)'};">
-                            <button onclick="toggleChapterCompletion(event, '${l.subject}', ${l.lessonNum}, ${idx})" style="width:24px; height:24px; border-radius:50%; border:2px solid ${isComp ? 'var(--primary)' : '#cbd5e1'}; background:${isComp ? 'var(--primary)' : 'none'}; color:white; font-size:12px; cursor:pointer; display:flex; justify-content:center; align-items:center; flex-shrink:0;">${isComp ? '✓' : ''}</button>
-                            <span onclick="openLessonFromList('${l.subject}', ${l.lessonNum}, ${b.start_seconds})" style="flex:1; margin-right:12px; font-size:13px; color:var(--text); cursor:pointer; text-align:right;">${b.title}</span>
-                        </div>`;
-                    });
-                }
-                html += `</div></div>`;
-                subjContent.innerHTML += html;
-            });
-            
-            subjHeader.onclick = () => {
-                subjContent.classList.toggle('active');
-                subjHeader.classList.toggle('active');
-            };
-            
-            listContainer.appendChild(subjHeader);
-            listContainer.appendChild(subjContent);
-        }
-    });
-}
-
-function openSubjectDetail(data, colorClass) {
-    currentActiveSubjectData = data;
-    currentActiveSubjectColor = colorClass;
-    const listContainer = document.getElementById('subjects-list');
-    listContainer.innerHTML = '';
-    
-    const header = document.createElement('div');
-    header.className = `subject-detail-header ${colorClass}`;
-    header.innerHTML = `
-        <button class="back-btn" onclick="buildSyllabusTab(DB)">رجوع ➡️</button>
-        <h2 style="color: var(--subject-color, var(--primary, var(--accent-color)));">${data.label}</h2>
-    `;
-    listContainer.appendChild(header);
-    
-    const grid = document.createElement('div');
-    grid.className = 'smart-grid';
-    
-    data.lessons.forEach(l => {
-        let total = 0, comp = 0;
-        if (l.thematic_blocks && l.thematic_blocks.length) {
-            l.thematic_blocks.forEach((b, idx) => {
-                total++;
-                if (syllabusCompletion[`${l.subject}_${l.lessonNum}_${idx}`]) comp++;
-            });
-        } else {
-            total = 1;
-        }
-        let p = total > 0 ? (comp / total) * 100 : 0;
-        let deg = (p / 100) * 360;
-        const isComplete = comp > 0 && comp === total;
-        
-        const btn = document.createElement('button');
-        btn.className = `smart-lesson-btn ${colorClass} ${p === 100 ? 'completed' : ''}`;
-        
-        let badgeHtml = '';
-        if (total > 0) {
-            if (isComplete) {
-                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--success, #10b981); background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box; margin-top: 4px; line-height: 1.2;">✅ ${comp}/${total} محاور</div>`;
-            } else if (comp > 0) {
-                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--subject-color, var(--primary, var(--accent-color))); background: rgba(0, 0, 0, 0.05); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box; margin-top: 4px; line-height: 1.2;">▶️ ${comp}/${total} محاور</div>`;
-            } else {
-                badgeHtml = `<div style="font-size: 11px; font-weight: bold; color: var(--text-3); background: rgba(0, 0, 0, 0.05); padding: 2px 6px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box; margin-top: 4px; line-height: 1.2;">${total} محاور</div>`;
-            }
-        }
-
-        let ringStyle = p === 100 
-            ? `background: var(--subject-color, var(--primary, var(--accent-color)));` 
-            : `background: conic-gradient(var(--subject-color, var(--primary, var(--accent-color))) ${deg}deg, var(--surface-2) 0deg);`;
-
-        btn.innerHTML = `
-            <div class="ring" style="${ringStyle}">
-                <div class="inner">${l.lessonNum}</div>
-            </div>
-            ${badgeHtml}
-        `;
-        
-        btn.onclick = () => {
-            openLessonPreview(l);
-        };
-        grid.appendChild(btn);
-    });
-    
-    listContainer.appendChild(grid);
-}
-
-
-
-// YouTube Player Setup
-function onYouTubeIframeAPIReady() {
-    // API ready
-}
-
-function initYouTubePlayer(videoId) {
-    if (player && typeof player.loadVideoById === 'function') {
-        let start = pendingSeekTime || 0;
-        player.loadVideoById({'videoId': videoId, 'startSeconds': start});
-        player.playVideo();
-        pendingSeekTime = null;
-    } else {
-        player = new YT.Player('youtube-player', {
-            height: '100%',
-            width: '100%',
-            videoId: videoId,
-            playerVars: {
-                'playsinline': 1,
-                'rel': 0,
-                'controls': 1,
-                'autoplay': 1,
-                'modestbranding': 1,
-                'showinfo': 0,
-                'start': pendingSeekTime || 0
-            },
-            events: {
-                'onReady': (e) => {
-                    e.target.playVideo();
-                    pendingSeekTime = null;
-                }
-            }
-        });
+    );
     }
 }
 function renderLessonHeader(lesson) {
@@ -602,7 +414,6 @@ function renderLessonHeader(lesson) {
 function prepareThematicData(lesson) {
     thematicData = [];
     if (!lesson.segments || lesson.segments.length === 0) {
-        // Fallback if no segments
         thematicData.push({
             title: "Leçon complète",
             startTime: 0,
@@ -620,140 +431,191 @@ function prepareThematicData(lesson) {
 
     let questions = lesson.quiz ? [...lesson.quiz] : [];
 
+    let groupedThemes = [];
     blocks.forEach((block, idx) => {
-        // Determine end time securely
         let nextStart = (idx < blocks.length - 1) ? blocks[idx+1].start_seconds : 99999;
-        
-        // Find segments for this block
         let blockSegments = lesson.segments.filter(s => s.sec >= block.start_seconds && s.sec < nextStart);
         
-        let htmlContent = "";
-
-        // Extract tags [POEME:X] shatr 1 *** shatr 2 [/POEME] or just [POEME] shatr 1 *** shatr 2 [/POEME]
-        const poetryRegex = /\[POEME(?::(\d+))?\](.*?)\[\/POEME\]/g;
-
-        let parts = [];
-        let lastIndex = 0;
-        let match;
-
-        let blockText = blockSegments.map(s => `[[TS:${s.sec}]]${s.text}`).join(' ');
-        let lastTs = block.start_seconds || 0;
+        let blockObj = {
+            block: block,
+            idx: idx,
+            nextStart: nextStart,
+            segments: blockSegments
+        };
         
-        function injectKaraokeSpans(htmlString) {
-            let initialTs = lastTs;
-            let res = htmlString.replace(/\[\[TS:(\d+(?:\.\d+)?)\]\]/g, (match, sec) => {
-                lastTs = sec;
-                return `</span><span class="karaoke-segment" data-start="${sec}">`;
-            });
-            if (res.startsWith('</span>')) {
-                res = res.substring(7);
+        if (block.is_sub_theme && groupedThemes.length > 0) {
+            groupedThemes[groupedThemes.length - 1].subBlocks.push(blockObj);
+        } else {
+            blockObj.subBlocks = [];
+            groupedThemes.push(blockObj);
+        }
+    });
+
+    groupedThemes.forEach((themeObj) => {
+        const mainBlock = themeObj.block;
+        const mainIdx = themeObj.idx;
+        
+        let htmlContent = "";
+        let subThemesList = [];
+
+        function renderBlockToHtml(bObj, isMain) {
+            let b = bObj.block;
+            let res = "";
+
+            if (isReadingMode) {
+                let textToRender = (b.reading_text && b.reading_text.trim() !== "") ? b.reading_text : (b.search_text || "");
+                if (!isMain && b.title) {
+                    res += `<h3 id="reading-subtheme-${bObj.idx}" style="color: var(--primary); margin-top: 24px; margin-bottom: 12px;">${b.title}</h3>`;
+                    subThemesList.push({ id: `reading-subtheme-${bObj.idx}`, title: b.title, time: b.start_seconds });
+                }
+                
+                const poetryRegex = /\[POEME(?::(\d+))?\](.*?)\[\/POEME\]/g;
+                let parts = [];
+                let lastIndex = 0;
+                let match;
+
+                while ((match = poetryRegex.exec(textToRender)) !== null) {
+                    const prose = textToRender.substring(lastIndex, match.index);
+                    if (prose) parts.push({ type: 'prose', content: prose });
+                    let innerText = match[2].trim();
+                    let s1 = innerText, s2 = '';
+                    if (innerText.includes('***')) {
+                        let split = innerText.split('***');
+                        s1 = split[0].trim();
+                        s2 = split[1].trim();
+                    }
+                    parts.push({ type: 'poetry', num: match[1] || null, shatr1: s1, shatr2: s2 });
+                    lastIndex = poetryRegex.lastIndex;
+                }
+
+                if (lastIndex < textToRender.length) parts.push({ type: 'prose', content: textToRender.substring(lastIndex) });
+                if (parts.length === 0) parts.push({ type: 'prose', content: textToRender });
+
+                parts.forEach(part => {
+                    if (part.type === 'prose') {
+                        if (!part.content.trim()) return;
+                        let paragraphs = part.content.split(/\n\s*\n/).filter(p => p.trim());
+                        paragraphs.forEach(p => {
+                            let formatted = p.replace(/\n/g, '<br>');
+                            res += `<div class="reader-paragraph">${formatProse(formatted)}</div>`;
+                        });
+                    } else {
+                        const s1 = formatProse(part.shatr1.trim());
+                        const s2 = part.shatr2 ? formatProse(part.shatr2.trim()) : '';
+                        const numBadge = part.num ? `<div style="position: absolute; top: -14px; right: 20px; background: var(--gold, #d4af37); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid white;">بيت ${part.num}</div>` : '';
+                        res += `<div class="poetry-verse-container" style="position: relative; margin: 28px auto 18px auto; max-width: 90%; direction: rtl; text-align: center;">${numBadge}<div class="poetry-verse" style="background: #fffdf5; border: 1.1px solid #f2e7c9; border-radius: 14px; padding: 16px 16px 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); font-family: 'Amiri', serif; line-height: 1.8; display: inline-block; width: 100%; box-sizing: border-box; margin-top: ${part.num ? '8px' : '0'};"><div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; margin-bottom: ${s2 ? '6px' : '0'}; text-align: center;">${s1}</div>${s2 ? `<div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; text-align: center;">${s2}</div>` : ''}</div></div>`;
+                    }
+                });
+
+                if (b.explanation && b.explanation.trim() !== "") {
+                    res += `<div class="reader-chapter-explanation"><div class="explanation-header"><span class="explanation-icon">💡</span><span class="explanation-title">توجيه وفائدة (Note du Professeur)</span></div><div class="explanation-content">${b.explanation}</div></div>`;
+                }
+
             } else {
-                res = `<span class="karaoke-segment" data-start="${initialTs}">` + res;
+                const poetryRegex = /\[POEME(?::(\d+))?\](.*?)\[\/POEME\]/g;
+                let parts = [];
+                let lastIndex = 0;
+                let match;
+                let blockText = bObj.segments.map(s => `[[TS:${s.sec}]]${s.text}`).join(' ');
+                let lastTs = b.start_seconds || 0;
+                
+                function injectKaraokeSpans(htmlString) {
+                    let initialTs = lastTs;
+                    let out = htmlString.replace(/\[\[TS:(\d+(?:\.\d+)?)\]\]/g, (m, sec) => {
+                        lastTs = sec;
+                        return `</span><span class="karaoke-segment" data-start="${sec}">`;
+                    });
+                    if (out.startsWith('</span>')) out = out.substring(7);
+                    else out = `<span class="karaoke-segment" data-start="${initialTs}">` + out;
+                    out = out + `</span>`;
+                    return out.replace(/<span[^>]*>\s*<\/span>/g, '');
+                }
+
+                while ((match = poetryRegex.exec(blockText)) !== null) {
+                    const prose = blockText.substring(lastIndex, match.index);
+                    if (prose) parts.push({ type: 'prose', content: prose });
+                    let innerText = match[2].trim();
+                    let s1 = innerText, s2 = '';
+                    if (innerText.includes('***')) {
+                        let split = innerText.split('***');
+                        s1 = split[0].trim();
+                        s2 = split[1].trim();
+                    }
+                    parts.push({ type: 'poetry', num: match[1] || null, shatr1: s1, shatr2: s2 });
+                    lastIndex = poetryRegex.lastIndex;
+                }
+
+                if (lastIndex < blockText.length) parts.push({ type: 'prose', content: blockText.substring(lastIndex) });
+                if (parts.length === 0) parts.push({ type: 'prose', content: blockText });
+
+                parts.forEach(part => {
+                    if (part.type === 'prose') {
+                        if (!part.content.trim()) return;
+                        let sentences = part.content.match(/[^.!?]+[.!?]*/g) || [part.content];
+                        let pText = "", pCount = 0;
+                        sentences.forEach(sentence => {
+                            pText += sentence.trim() + " "; pCount++;
+                            if (pCount >= 4) {
+                                res += `<div class="reader-paragraph">${injectKaraokeSpans(formatProse(pText))}</div>`;
+                                pText = ""; pCount = 0;
+                            }
+                        });
+                        if (pText.trim() !== "") res += `<div class="reader-paragraph">${injectKaraokeSpans(formatProse(pText))}</div>`;
+                    } else {
+                        const s1 = injectKaraokeSpans(formatProse(part.shatr1.trim()));
+                        const s2 = part.shatr2 ? injectKaraokeSpans(formatProse(part.shatr2.trim())) : '';
+                        const numBadge = part.num ? `<div style="position: absolute; top: -14px; right: 20px; background: var(--gold, #d4af37); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid white;">بيت ${part.num}</div>` : '';
+                        res += `<div class="poetry-verse-container" style="position: relative; margin: 28px auto 18px auto; max-width: 90%; direction: rtl; text-align: center;">${numBadge}<div class="poetry-verse" style="background: #fffdf5; border: 1.1px solid #f2e7c9; border-radius: 14px; padding: 16px 16px 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); font-family: 'Amiri', serif; line-height: 1.8; display: inline-block; width: 100%; box-sizing: border-box; margin-top: ${part.num ? '8px' : '0'};"><div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; margin-bottom: ${s2 ? '6px' : '0'}; text-align: center;">${s1}</div>${s2 ? `<div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; text-align: center;">${s2}</div>` : ''}</div></div>`;
+                    }
+                });
+
+                if (b.explanation && b.explanation.trim() !== "") {
+                    res += `<div class="reader-chapter-explanation"><div class="explanation-header"><span class="explanation-icon">💡</span><span class="explanation-title">توجيه وفائدة (Note du Professeur)</span></div><div class="explanation-content">${b.explanation}</div></div>`;
+                }
+
+                let subThemeIndex = 0;
+                res = res.replace(/<span([^>]*)>([^<]*)\[SOUS-THEME:\s*(.*?)\]([^<]*)<\/span>/g, (match, spanAttrs, before, title, after) => {
+                    let secMatch = spanAttrs.match(/data-start="([^"]+)"/);
+                    let timeSec = secMatch ? parseFloat(secMatch[1]) : (b.start_seconds || 0);
+                    let id = `subtheme-${bObj.idx}-${subThemeIndex++}`;
+                    subThemesList.push({ id: id, title: title.trim(), time: timeSec });
+                    
+                    let out = `</div><div class="sub-theme-header" id="${id}"><h3><span class="sub-theme-icon"></span>${title.trim()}</h3></div><div class="reader-paragraph">`;
+                    if (before.trim() || after.trim()) {
+                        out += `<span${spanAttrs}>${before}${after}</span>`;
+                    }
+                    return out;
+                });
             }
-            res = res + `</span>`;
-            // Clean up empty spans
-            res = res.replace(/<span[^>]*>\s*<\/span>/g, '');
             return res;
         }
 
-        while ((match = poetryRegex.exec(blockText)) !== null) {
-            const prose = blockText.substring(lastIndex, match.index);
-            if (prose) parts.push({ type: 'prose', content: prose });
-            
-            // Inside the tag, we expect *** to separate the two halves, but it's optional in case they write a 1 line quote.
-            let innerText = match[2].trim();
-            let s1 = innerText, s2 = '';
-            if (innerText.includes('***')) {
-                let split = innerText.split('***');
-                s1 = split[0].trim();
-                s2 = split[1].trim();
-            }
-            
-            parts.push({
-                type: 'poetry',
-                num: match[1] || null,
-                shatr1: s1,
-                shatr2: s2
-            });
-            lastIndex = poetryRegex.lastIndex;
-        }
-
-        if (lastIndex < blockText.length) {
-            parts.push({ type: 'prose', content: blockText.substring(lastIndex) });
-        }
-        if (parts.length === 0) {
-            parts.push({ type: 'prose', content: blockText });
-        }
-
-        parts.forEach(part => {
-            if (part.type === 'prose') {
-                if (!part.content.trim()) return;
-                
-                // Group sentences into paragraphs of ~4 sentences for better readability
-                let sentences = part.content.match(/[^.!?]+[.!?]*/g) || [part.content];
-                let pText = "";
-                let pCount = 0;
-                
-                sentences.forEach(sentence => {
-                    pText += sentence.trim() + " ";
-                    pCount++;
-                    if (pCount >= 4) {
-                        htmlContent += `<div class="reader-paragraph">${injectKaraokeSpans(formatProse(pText))}</div>`;
-                        pText = "";
-                        pCount = 0;
-                    }
-                });
-                if (pText.trim() !== "") {
-                    htmlContent += `<div class="reader-paragraph">${injectKaraokeSpans(formatProse(pText))}</div>`;
-                }
-            } else {
-                const s1 = injectKaraokeSpans(formatProse(part.shatr1.trim()));
-                const s2 = part.shatr2 ? injectKaraokeSpans(formatProse(part.shatr2.trim())) : '';
-                const numBadge = part.num ? `<div style="position: absolute; top: -14px; right: 20px; background: var(--gold, #d4af37); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid white;">بيت ${part.num}</div>` : '';
-                
-                htmlContent += `
-                <div class="poetry-verse-container" style="position: relative; margin: 28px auto 18px auto; max-width: 90%; direction: rtl; text-align: center;">
-                    ${numBadge}
-                    <div class="poetry-verse" style="background: #fffdf5; border: 1.1px solid #f2e7c9; border-radius: 14px; padding: 16px 16px 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); font-family: 'Amiri', serif; line-height: 1.8; display: inline-block; width: 100%; box-sizing: border-box; margin-top: ${part.num ? '8px' : '0'};">
-                        <div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; margin-bottom: ${s2 ? '6px' : '0'}; text-align: center;">${s1}</div>
-                        ${s2 ? `<div class="shatr" style="font-size: 16.5px; font-weight: 700; color: #854d0e; text-align: center;">${s2}</div>` : ''}
-                    </div>
-                </div>`;
-            }
+        htmlContent += renderBlockToHtml(themeObj, true);
+        
+        themeObj.subBlocks.forEach(sb => {
+            htmlContent += renderBlockToHtml(sb, false);
         });
 
-        if (block.explanation && block.explanation.trim() !== "") {
-            htmlContent += `
-            <div class="reader-chapter-explanation">
-                <div class="explanation-header">
-                    <span class="explanation-icon">💡</span>
-                    <span class="explanation-title">توجيه وفائدة (Note du Professeur)</span>
-                </div>
-                <div class="explanation-content">${block.explanation}</div>
-            </div>`;
-        }
-
-        // Find questions for this block
         let blockQuestions = [];
+        let groupEndSec = themeObj.subBlocks.length > 0 ? themeObj.subBlocks[themeObj.subBlocks.length-1].nextStart : themeObj.nextStart;
         for (let i = questions.length - 1; i >= 0; i--) {
             let q = questions[i];
             let qTimeSec = extractSecondsFromExplanation(q.explanation);
-            
-            // Assign question to this block if its time falls within, or if we couldn't parse time and it's the last block
-            if ((qTimeSec >= block.start_seconds && qTimeSec < nextStart) || 
-                (idx === blocks.length - 1 && qTimeSec === -1)) {
+            if ((qTimeSec >= mainBlock.start_seconds && qTimeSec < groupEndSec) || (mainIdx === blocks.length - 1 && qTimeSec === -1)) {
                 blockQuestions.push(q);
                 questions.splice(i, 1);
             }
         }
 
         thematicData.push({
-            title: block.title,
-            level: block.level || 1,
-            startTime: block.start_seconds,
-            endTime: nextStart,
+            title: mainBlock.title,
+            level: mainBlock.level || 1,
+            startTime: mainBlock.start_seconds,
+            endTime: groupEndSec,
             htmlContent: htmlContent,
-            questions: blockQuestions.reverse()
+            questions: blockQuestions.reverse(),
+            subThemes: subThemesList,
+            originalIndex: mainIdx
         });
     });
 }
@@ -871,7 +733,29 @@ function switchThemeTab(index, shouldSeek = true) {
 
     // Text
     let textWrapper = document.createElement('div');
-    textWrapper.innerHTML = data.htmlContent;
+    
+    let pillsHtml = '';
+    if ((data.subThemes && data.subThemes.length > 0) || (data.questions && data.questions.length > 0)) {
+        pillsHtml = `<div class="sub-themes-container" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 8px;">`;
+        
+        if (data.subThemes) {
+            data.subThemes.forEach(st => {
+                if (isReadingMode) {
+                    pillsHtml += `<button class="sub-theme-pill" onclick="document.getElementById('${st.id}').scrollIntoView({behavior:'smooth', block:'start'})" style="background: var(--primary); color: white; border: none; border-radius: 20px; padding: 6px 14px; font-size: 13px; cursor: pointer; transition: opacity 0.2s; white-space: nowrap;">${st.title}</button>`;
+                } else {
+                    pillsHtml += `<button class="sub-theme-pill" onclick="jumpToSubTheme(${st.time}, '${st.id}')" style="background: var(--primary); color: white; border: none; border-radius: 20px; padding: 6px 14px; font-size: 13px; cursor: pointer; transition: opacity 0.2s; white-space: nowrap;">${st.title}</button>`;
+                }
+            });
+        }
+        
+        if (data.questions && data.questions.length > 0) {
+            pillsHtml += `<button class="sub-theme-pill" onclick="document.querySelector('.inline-quiz-container').scrollIntoView({behavior:'smooth', block:'start'})" style="background: #eab308; color: white; border: none; border-radius: 20px; padding: 6px 14px; font-size: 13px; cursor: pointer; transition: opacity 0.2s; white-space: nowrap; font-weight: bold;">❓ الذهاب إلى الأسئلة</button>`;
+        }
+        
+        pillsHtml += `</div>`;
+    }
+    
+    textWrapper.innerHTML = pillsHtml + data.htmlContent;
     contentDiv.appendChild(textWrapper);
 
     // Questions
@@ -1002,16 +886,29 @@ function switchThemeTab(index, shouldSeek = true) {
 
     contentArea.appendChild(contentDiv);
 
-    // Video Seek
-    if (shouldSeek && player && player.seekTo) {
-        isSeekingTab = true;
-        player.seekTo(data.startTime, true);
-        player.playVideo();
-        setTimeout(() => { isSeekingTab = false; }, 1500);
-        // Scroll to video
+    // Video Seek and Reading Mode Toggle
+    const videoWrapper = document.getElementById('video-wrapper');
+    const videoTools = document.getElementById('video-tools');
+    if (isReadingMode) {
+        if (videoWrapper) videoWrapper.style.display = 'none';
+        if (videoTools) videoTools.style.display = 'none';
+        if (player && player.pauseVideo) player.pauseVideo();
+        contentArea.style.paddingTop = '20px';
         window.scrollTo({top: 0, behavior: 'smooth'});
-    } else if (shouldSeek) {
-        window.scrollTo({top: 0, behavior: 'smooth'});
+    } else {
+        if (videoWrapper) videoWrapper.style.display = 'flex';
+        if (videoTools) videoTools.style.display = 'flex';
+        if (btnZen) btnZen.style.display = 'inline-block';
+        contentArea.style.paddingTop = '0px';
+        if (shouldSeek && player && player.seekTo) {
+            isSeekingTab = true;
+            player.seekTo(data.startTime, true);
+            player.playVideo();
+            setTimeout(() => { isSeekingTab = false; }, 1500);
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        } else if (shouldSeek) {
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        }
     }
 }
 
@@ -1104,6 +1001,26 @@ function createQuizElement(questionData) {
 
     return container;
 }
+
+window.jumpToSubTheme = function(time, id) {
+    const isZenMode = document.body.classList.contains('zen-mode');
+    if (isZenMode) {
+        const el = document.getElementById(id);
+        if (el) {
+            const headerOffset = 180;
+            const elementPosition = el.getBoundingClientRect().top;
+            const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+            window.scrollTo({
+                top: offsetPosition,
+                behavior: "smooth"
+            });
+        }
+    } else {
+        if (player && typeof player.seekTo === 'function') {
+            player.seekTo(time, true);
+        }
+    }
+};
 
 function extractVideoID(url) {
     let match = url.match(/[?&]v=([^&]+)/);
@@ -1571,20 +1488,13 @@ function formatSeconds(s) { const m = Math.floor(s/60); const ss = Math.floor(s%
 
 function setSyllabusMode(mode) {
     syllabusMode = mode;
-    const gridBtn = document.getElementById('toggle-grid-btn');
-    const listBtn = document.getElementById('toggle-list-btn');
-    if (mode === 'grid') {
-        gridBtn.style.background = 'var(--primary)';
-        gridBtn.style.color = 'white';
-        listBtn.style.background = 'transparent';
-        listBtn.style.color = 'var(--text-2)';
+    // Buttons are dynamically rendered inside openSubjectDetail now
+    // We just trigger a re-render of the current view
+    if (currentActiveSubjectData) {
+        openSubjectDetail(currentActiveSubjectData, currentActiveSubjectColor);
     } else {
-        listBtn.style.background = 'var(--primary)';
-        listBtn.style.color = 'white';
-        gridBtn.style.background = 'transparent';
-        gridBtn.style.color = 'var(--text-2)';
+        buildSyllabusTab(DB);
     }
-    buildSyllabusTab(DB);
 }
 
 function toggleChapterCompletion(event, subject, lessonNum, chapterIdx) {
@@ -1886,27 +1796,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-document.addEventListener('DOMContentLoaded', () => {
-    const stickyToggleBtn = document.getElementById('btn-sticky-toggle');
-    const stickyContainer = document.getElementById('sticky-header-container');
-    const videoWrapper = document.getElementById('video-wrapper');
-    
-    if (stickyToggleBtn && stickyContainer && videoWrapper) {
-        stickyToggleBtn.addEventListener('click', () => {
-            if (videoWrapper.style.display === 'none') {
-                videoWrapper.style.display = 'flex';
-                stickyToggleBtn.style.background = 'var(--surface)';
-                stickyToggleBtn.style.color = 'var(--text)';
-                stickyToggleBtn.setAttribute('title', 'Désépingler la vidéo');
-            } else {
-                videoWrapper.style.display = 'none';
-                stickyToggleBtn.style.background = 'var(--primary)';
-                stickyToggleBtn.style.color = 'white';
-                stickyToggleBtn.setAttribute('title', 'Épingler la vidéo');
-            }
-        });
-    }
-});
+
 
 function applySpacing() {
     const rc = document.getElementById('reader-content');
@@ -2091,3 +1981,22 @@ function togglePreviewChapter(e, subject, lessonNum, chapterIdx, el) {
 
 document.getElementById('close-preview-btn').onclick = closeLessonPreview;
 document.getElementById('lesson-preview-overlay').onclick = closeLessonPreview;
+
+
+// Vertical Scroll Progress Logic
+window.addEventListener('scroll', () => {
+    const vContainer = document.getElementById('vertical-scroll-progress-container');
+    const vFill = document.getElementById('vertical-scroll-progress-fill');
+    
+    if (vContainer && vFill) {
+        if (typeof isReadingMode !== 'undefined' && isReadingMode) {
+            vContainer.style.display = 'block';
+            const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+            const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const scrolled = (winScroll / height) * 100;
+            vFill.style.height = scrolled + "%";
+        } else {
+            vContainer.style.display = 'none';
+        }
+    }
+});

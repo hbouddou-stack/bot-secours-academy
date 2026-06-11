@@ -5688,6 +5688,19 @@ window.addEventListener('unhandledrejection', function(e) {
 
         
 
+        window.toggleCardAccordion = function(cardId, btn, count) {
+            const el = document.getElementById(cardId);
+            if (el) {
+                if (el.style.display === 'none') {
+                    el.style.display = 'block';
+                    btn.innerHTML = `إخفاء المحاور ⬆️`;
+                } else {
+                    el.style.display = 'none';
+                    btn.innerHTML = `+ ${count} محاور أخرى ⬇️`;
+                }
+            }
+        };
+
         window.toggleLessonDetails = function(id) {
 
             const el = document.getElementById('lesson-details-' + id);
@@ -7265,40 +7278,38 @@ window.addEventListener('unhandledrejection', function(e) {
 
                     } else {
 
-                        // CARD VIEW
+                        // CARD VIEW (TAGS DESIGN)
+                        let axesHtml = '';
+                        const blocks = lesson.thematic_blocks || [];
+                        if (blocks.length === 0) {
+                            axesHtml = '<div style="font-size: 0.85rem; color: var(--text-secondary); font-style: italic; margin-bottom: 15px;">لا توجد محاور مسجلة</div>';
+                        } else {
+                            axesHtml = '<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px;">';
+                            let tagColor = subColor.startsWith('var(') ? '#8b5cf6' : subColor;
+                            blocks.forEach((b, idx) => {
+                                axesHtml += `<span style="background: ${tagColor}15; border: 1px solid ${tagColor}40; color: ${tagColor}; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem; display: flex; align-items: center; gap: 4px; font-weight: 600;"><strong style="color: ${tagColor}; font-size: 0.85rem; font-weight: 800;">${idx + 1}.</strong> <span>${escapeHtml(b.title || 'محور')}</span></span>`;
+                            });
+                            axesHtml += '</div>';
+                        }
 
                         html += `
 
-                            <div class="settings-card" style="flex-direction: column; align-items: stretch; padding: 20px; min-height: 180px; display: flex; justify-content: space-between; border-top: 4px solid ${subColor}; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border-radius: 12px; background: var(--surface);">
+                            <div class="settings-card" style="flex-direction: column; align-items: stretch; padding: 20px; min-height: 150px; display: flex; justify-content: space-between; border-top: 4px solid ${subColor}; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border-radius: 12px; background: var(--surface);">
 
                                 <div>
 
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                    <h3 style="margin: 0 0 16px 0; font-size: 1.25rem; color: var(--text-primary); font-weight: 800;">${lesson.title || `\u0627\u0644\u062f\u0631\u0633 ${lesson.lessonNum}`}</h3>
 
-                                        <span class="badge" style="background: ${subColor}22; color: ${subColor}; font-weight: bold; border: 1px solid ${subColor}44; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem;">${subLabel}</span>
-
-                                        <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">\u0627\u0644\u062f\u0631\u0633 ${lesson.lessonNum}</span>
-
-                                    </div>
-
-                                    <h3 style="margin: 0 0 10px 0; font-size: 1.1rem; color: var(--text-primary); font-weight: 600;">${lesson.title || `\u0627\u0644\u062f\u0631\u0633 ${lesson.lessonNum}`}</h3>
-
-                                    <p style="margin: 0 0 15px 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-
-                                        ${lesson.full_text ? lesson.full_text.substring(0, 150) + '...' : '\u0644\u0627 \u064a\u0648\u062c\u062f \u0646\u0635 \u0644\u0644\u062a\u0641\u0631\u064a\u063a'}
-
-                                    </p>
+                                    ${axesHtml}
 
                                 </div>
 
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; gap: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; border-top: 1px solid var(--border); padding-top: 14px; gap: 8px;">
 
-                                    <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">\ud83e\udde9 ${segmentsCount} \u0641\u0642\u0631\u0629</span>
+                                    <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: bold;">📌 ${blocks.length} محاور</span>
 
-                                    <button class="btn btn-primary btn-sm" style="padding: 6px 12px; font-size: 0.8rem; height: auto;" onclick="openTranscriptDrawer('${lesson.subject}', ${lesson.lessonNum})">
-
-                                        \ud83d\udcdd \u062a\u062d\u0631\u064a\u0631 \u0627\u0644\u062a\u0641\u0631\u064a\u063a
-
+                                    <button class="btn btn-primary btn-sm" style="padding: 6px 14px; font-size: 0.85rem; height: auto; border-radius: 8px; font-weight: bold;" onclick="openTranscriptDrawer('${lesson.subject}', ${lesson.lessonNum})">
+                                        📝 تحرير
                                     </button>
 
                                 </div>
@@ -8900,6 +8911,69 @@ window.addEventListener('unhandledrejection', function(e) {
 
         }
 
+        window.resyncTranscriptBlock = function(btn, bIdx) {
+            if (!transcriptEditorLesson || !transcriptEditorLesson.segments) return;
+            const section = btn.closest('.transcript-block-section');
+            if (!section) return;
+            const tsInput = section.querySelector('.tb-ts-input');
+            if (!tsInput) return;
+            
+            const tsParts = tsInput.value.trim().split(':');
+            let startSec = 0;
+            if (tsParts.length === 2) {
+                startSec = parseInt(tsParts[0], 10) * 60 + parseInt(tsParts[1], 10);
+            } else if (tsParts.length === 3) {
+                startSec = parseInt(tsParts[0], 10) * 3600 + parseInt(tsParts[1], 10) * 60 + parseInt(tsParts[2], 10);
+            } else {
+                alert("Format de chrono invalide. Utilisez MM:SS ou HH:MM:SS.");
+                return;
+            }
+
+            // 1. Update the block in the original unsorted array first
+            if (transcriptEditorLesson.thematic_blocks && transcriptEditorLesson.thematic_blocks[bIdx]) {
+                transcriptEditorLesson.thematic_blocks[bIdx].start_seconds = startSec;
+            }
+            
+            // 2. Sort a copy of the blocks to find the TRUE chronological next block
+            const sortedBlocks = [...(transcriptEditorLesson.thematic_blocks || [])].sort((a, b) => (a.start_seconds || 0) - (b.start_seconds || 0));
+            
+            // 3. Find our block's new position in the sorted array
+            const sortedIdx = sortedBlocks.findIndex(b => b === transcriptEditorLesson.thematic_blocks[bIdx]);
+            
+            // 4. Safely get the endSec from the chronologically next block
+            const endSec = sortedIdx + 1 < sortedBlocks.length ? (sortedBlocks[sortedIdx + 1].start_seconds || Infinity) : Infinity;
+            const blockSegs = transcriptEditorLesson.segments.filter(seg => (seg.sec || 0) >= startSec && (seg.sec || 0) < endSec);
+            const newText = blockSegs.map(s => s.text).join(' ');
+            
+            const ta = section.querySelector('.transcript-block-editor');
+            if (ta) {
+                if (ta.dataset.isSira === 'true') {
+                    ta.value = newText; 
+                    const container = section.querySelector('.sira-verses-container');
+                    if (container) {
+                        const verses = newText.split('\n');
+                        let editorHtml = '';
+                        verses.forEach((verse, i) => {
+                            editorHtml += `<div class="sira-verse-row" style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
+                                <span class="verse-number" style="font-size:0.8rem; color:var(--gold-light); font-weight:bold; min-width:20px; text-align:center;">${i+1}</span>
+                                <textarea class="form-select sira-verse-input" style="flex:1; min-height:45px; padding:6px 10px; line-height:1.5; resize:vertical;">${verse.replace(/"/g, '&quot;')}</textarea>
+                                <button class="btn btn-secondary btn-sm" onclick="removeVerseRow(this)" style="padding:4px 8px;">❌</button>
+                            </div>`;
+                        });
+                        container.innerHTML = editorHtml;
+                    }
+                } else {
+                    ta.value = newText;
+                }
+            }
+            
+            const originalBg = btn.style.backgroundColor;
+            btn.style.backgroundColor = '#10b981';
+            setTimeout(() => {
+                btn.style.backgroundColor = originalBg;
+            }, 800);
+        };
+
         function renderTranscriptEditorHTML(lesson) {
 
             const blocks = [...(lesson.thematic_blocks || [])].sort((a, b) => (a.start_seconds || 0) - (b.start_seconds || 0));
@@ -9112,7 +9186,10 @@ window.addEventListener('unhandledrejection', function(e) {
 
                     ` : ''}
 
-                    <span style="font-size:0.72rem; color:var(--text-secondary); white-space:nowrap; display:flex; align-items:center; gap:4px;">⏱ <input type="text" class="form-select tb-ts-input" value="${firstTs}" style="width:50px; padding:2px; font-size:0.72rem; height:20px;" onclick="event.stopPropagation()"></span>
+                    <span style="font-size:0.72rem; color:var(--text-secondary); white-space:nowrap; display:flex; align-items:center; gap:4px;">
+                        ⏱ <input type="text" class="form-select tb-ts-input" value="${firstTs}" style="width:50px; padding:2px; font-size:0.72rem; height:20px;" onclick="event.stopPropagation()">
+                        <button class="btn btn-outline-primary btn-sm" style="padding: 0px 4px; font-size: 0.72rem; height: 20px; border: 1px solid var(--primary); background: transparent; cursor: pointer; border-radius: 4px;" onclick="event.stopPropagation(); window.resyncTranscriptBlock(this, ${blockId})" title="🪄 Recalculer le texte d'après ce nouveau chrono">🪄</button>
+                    </span>
 
                     ${vLink ? `<a href="${vLink}" target="_blank" style="font-size:0.72rem; color:var(--primary); text-decoration:none; background:var(--primary-light, rgba(79,70,229,0.1)); padding:3px 10px; border-radius:6px; white-space:nowrap;" onclick="event.stopPropagation()">🎥</a>` : ''}
 
@@ -9444,58 +9521,42 @@ window.addEventListener('unhandledrejection', function(e) {
 
                 }
 
-                const count = segIdxs.length;
-
-                if (!count) {
-                    // No segments mapped — create virtual segments from the typed text
-                    // so the liseuse can display this block's content
-                    if (newText.trim()) {
-                        const sentences = smartSplitSentences(newText);
-                        sentences.forEach((sentence, i) => {
-                            if (!sentence.trim()) return;
-                            const sec = firstSec + i * 4;
-                            origSegments.push({
-                                ts: secToTs(sec),
-                                sec: sec,
-                                text: sentence.trim(),
-                                video_link: vLink ? rebuildVideoLink(vLink, sec) : ''
-                            });
-                        });
+                // Blank out the old segments to avoid duplication
+                segIdxs.forEach(sIdx => {
+                    if (origSegments[sIdx]) {
+                        origSegments[sIdx].text = '';
                     }
-                    return;
-                }
+                });
 
-                const sentences = smartSplitSentences(newText);
+                // Split text: respect explicit newlines for Sira, otherwise use smart split
+                const sentences = ta.dataset.isSira === 'true' ? newText.split('\n') : smartSplitSentences(newText);
 
-                const secSpan   = Math.max(lastSec - firstSec, count * 4);
+                // Determine duration per sentence
+                const count = Math.max(sentences.length, 1);
+                const secSpan = Math.max(lastSec - firstSec, count * 4);
 
-                segIdxs.forEach((sIdx, i) => {
-
-                    const text      = sentences[i] !== undefined ? sentences[i].trim() : '';
-
-                    const secOffset = Math.round((i / Math.max(count - 1, 1)) * secSpan);
-
-                    const sec       = firstSec + secOffset;
-
-                    origSegments[sIdx] = {
-
-                        ts:         secToTs(sec),
-
-                        sec:        sec,
-
-                        text:       text,
-
+                // Push all new sentences as fresh segments
+                sentences.forEach((sentence, i) => {
+                    if (!sentence.trim()) return;
+                    const secOffset = Math.round((i / count) * secSpan);
+                    const sec = firstSec + secOffset;
+                    origSegments.push({
+                        ts: secToTs(sec),
+                        sec: sec,
+                        text: sentence.trim(),
                         video_link: vLink ? rebuildVideoLink(vLink, sec) : ''
-
-                    };
-
+                    });
                 });
 
             });
 
-            const cleanedSegments = origSegments.filter(s => (s.text || '').trim() !== '');
+            // Filter out empty segments and sort them strictly by time (sec)
+            const cleanedSegments = origSegments.filter(s => (s.text || '').trim() !== '').sort((a, b) => a.sec - b.sec);
             console.log('[TRANSCRIPT SAVE] cleanedSegments count:', cleanedSegments.length);
             console.log('[TRANSCRIPT SAVE] newThematicBlocks count:', newThematicBlocks.length);
+            // Ensure thematic blocks are strictly ordered by start time
+            newThematicBlocks.sort((a, b) => (a.start_seconds || 0) - (b.start_seconds || 0));
+
             console.log('[TRANSCRIPT SAVE] Sending to server: subject=', transcriptEditorLesson.subject, 'lessonNum=', transcriptEditorLesson.lessonNum, 'userId=', state.userId);
 
             try {
@@ -9577,6 +9638,79 @@ window.addEventListener('unhandledrejection', function(e) {
             return raw.filter(s => s.trim().length > 0);
 
         }
+
+        function smartAlignSentences(newSentences, originalSegments, firstSec, lastSec, fallbackCount = 4) {
+            // MATH FALLBACK
+            function mathAlign() {
+                const count = Math.max(newSentences.length, 1);
+                let secSpan = count * fallbackCount;
+                if (lastSec !== Infinity) {
+                    secSpan = Math.max(1, lastSec - firstSec - 1);
+                }
+                const results = [];
+                newSentences.forEach((sentence, i) => {
+                    if (!sentence.trim()) return;
+                    const secOffset = Math.round((i / count) * secSpan);
+                    results.push({ text: sentence.trim(), sec: firstSec + secOffset });
+                });
+                return results;
+            }
+
+            if (!originalSegments || originalSegments.length === 0) {
+                return mathAlign();
+            }
+
+            let fullOriginal = "";
+            let charToSec = [];
+            
+            for (const seg of originalSegments) {
+                const text = (seg.text || "") + " ";
+                const startLen = fullOriginal.length;
+                fullOriginal += text;
+                for(let i = 0; i < text.length; i++){
+                    charToSec[startLen + i] = seg.sec;
+                }
+            }
+            fullOriginal = fullOriginal.toLowerCase();
+
+            const results = [];
+            let searchStartIndex = 0;
+            let lastMatchedSec = firstSec;
+
+            function findBestMatch(sentence, startIndex) {
+                let clean = sentence.replace(/[.؟!؛،]/g, '').trim().toLowerCase();
+                let searchChunk = clean.substring(0, 30);
+                if(searchChunk.length < 5) return -1;
+                
+                let idx = fullOriginal.indexOf(searchChunk, startIndex);
+                if (idx !== -1) return idx;
+
+                searchChunk = clean.substring(0, 15);
+                if(searchChunk.length < 5) return -1;
+                idx = fullOriginal.indexOf(searchChunk, startIndex);
+                return idx;
+            }
+
+            for (let i = 0; i < newSentences.length; i++) {
+                const sentence = newSentences[i].trim();
+                if (!sentence) continue;
+
+                let matchIdx = findBestMatch(sentence, searchStartIndex);
+                let secToAssign = lastMatchedSec;
+
+                if (matchIdx !== -1) {
+                    secToAssign = charToSec[matchIdx];
+                    searchStartIndex = matchIdx + 10; 
+                    lastMatchedSec = secToAssign;
+                } else if (results.length === 0) {
+                    secToAssign = firstSec;
+                }
+
+                results.push({ text: sentence, sec: secToAssign });
+            }
+            return results;
+        }
+
 
         function secToTs(sec) {
 
@@ -11613,7 +11747,6 @@ window.addEventListener('unhandledrejection', function(e) {
                 return;
             }
 
-            // Create a deep copy of thematic blocks to edit locally
             const blocksCopy = (lesson.thematic_blocks || []).map((b, idx) => {
                 // Fetch segments falling within the time boundaries of this block
                 const startSec = b.start_seconds || 0;
@@ -11623,7 +11756,10 @@ window.addEventListener('unhandledrejection', function(e) {
                 const rawSegText = blockSegs.map(s => s.text).join('\n');
 
                 return {
+                    ...b,
                     title: b.title || '',
+                    is_sub_theme: !!b.is_sub_theme,
+                    reading_text: b.reading_text || '',
                     explanation: b.explanation || '',
                     video_link: b.video_link || '',
                     poetry_verses: b.poetry_verses || '',
@@ -11649,6 +11785,20 @@ window.addEventListener('unhandledrejection', function(e) {
 
             window.renderAxesSidebar();
             window.loadActiveAxis();
+        };
+
+        window.toggleAxesSidebar = function() {
+            const sidebar = document.getElementById('axes-sidebar-container');
+            const btn = document.getElementById('btn-toggle-sidebar');
+            if (sidebar.style.display === 'none') {
+                sidebar.style.display = 'flex';
+                btn.style.background = '';
+                btn.style.color = '';
+            } else {
+                sidebar.style.display = 'none';
+                btn.style.background = 'var(--primary)';
+                btn.style.color = 'white';
+            }
         };
 
         window.closeAxesEditor = function() {
@@ -11722,7 +11872,7 @@ window.addEventListener('unhandledrejection', function(e) {
             // Reconstruct text with tags
             const newText = text.substring(0, start) + `\n[POEME] ${selectedText.trim()} [/POEME]\n` + text.substring(end);
             txtArea.value = newText;
-            currentAxesEditing.blocks[activeAxisIdx].search_text = newText;
+            currentAxesEditing.blocks[activeAxisIdx].search_text = newText; currentAxesEditing.blocks[activeAxisIdx]._isModified = true;
             
             window.updateLiveStudentPreview();
             showToast("📜 تم إضافة علامات الشعر بنجاح (يمكنك إضافة رقم للبيت: [POEME:45])", "success");
@@ -11758,25 +11908,36 @@ window.addEventListener('unhandledrejection', function(e) {
             }
 
             editorPanel.innerHTML = `
-                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <div class="editor-card" style="flex: 1; min-width: 250px; margin-bottom: 0;">
-                        <div class="editor-card-title">📌 عنوان المحور</div>
-                        <input type="text" class="axes-input" value="${escapeHtml(block.title)}" placeholder="اكتب عنوان المحور هنا..." oninput="currentAxesEditing.blocks[activeAxisIdx].title = this.value; window.updateAxisSidebarTitle(activeAxisIdx); window.updateLiveStudentPreview();">
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; align-items: flex-start; flex-wrap: wrap; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div style="flex: 1; min-width: 250px;">
+                        <label style="font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 6px; font-size: 0.95rem;">📌 عنوان المحور (Titre)</label>
+                        <input type="text" value="${escapeHtml(block.title)}" placeholder="اكتب عنوان المحور هنا..." oninput="currentAxesEditing.blocks[activeAxisIdx].title = this.value; window.updateAxisSidebarTitle(activeAxisIdx); window.updateLiveStudentPreview();" style="width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; background: #fff; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); color: #333;">
+                        <label style="display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer; font-weight: bold; color: var(--text-secondary); font-size: 0.85rem;">
+                            <input type="checkbox" onchange="currentAxesEditing.blocks[activeAxisIdx].is_sub_theme = this.checked;" ${block.is_sub_theme ? 'checked' : ''} style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary);">
+                            <span>هذا المحور هو محور فرعي (Sous-thématique)</span>
+                        </label>
                     </div>
 
-                    <div class="editor-card" style="min-width: 200px; margin-bottom: 0;">
-                        <div class="editor-card-title">⏱ الكرونو (بداية المحور)</div>
-                        <div style="display: flex; gap: 8px; align-items: center; justify-content: center; background: var(--bg-primary); padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border-color);">
-                            <input type="number" id="chrono-mm" class="axes-input" value="${mm}" style="width: 60px; text-align: center; font-family: monospace; padding: 5px; margin: 0; background: transparent; border: none; font-size: 1.1rem;" placeholder="دقيقة" min="0" max="180" oninput="window.updateChronoFromInputs()">
-                            <span style="font-weight: bold; color: var(--text-secondary);">:</span>
-                            <input type="number" id="chrono-ss" class="axes-input" value="${ss}" style="width: 60px; text-align: center; font-family: monospace; padding: 5px; margin: 0; background: transparent; border: none; font-size: 1.1rem;" placeholder="ثانية" min="0" max="59" oninput="window.updateChronoFromInputs()">
+                    <div style="min-width: 150px;">
+                        <label style="font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 6px; font-size: 0.95rem;">⏱ الكرونو (MM:SS)</label>
+                        <div style="display: flex; gap: 4px; align-items: center; background: #fff; padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); direction: ltr; justify-content: center;">
+                            <input type="number" id="chrono-mm" value="${mm}" style="width: 50px; text-align: center; font-family: monospace; padding: 4px; margin: 0; background: transparent; border: none; font-size: 1.1rem; color: #333; outline: none;" placeholder="MM" min="0" max="180" oninput="window.updateChronoFromInputs()">
+                            <span style="font-weight: bold; color: #666; font-size: 1.2rem;">:</span>
+                            <input type="number" id="chrono-ss" value="${ss}" style="width: 50px; text-align: center; font-family: monospace; padding: 4px; margin: 0; background: transparent; border: none; font-size: 1.1rem; color: #333; outline: none;" placeholder="SS" min="0" max="59" oninput="window.updateChronoFromInputs()">
                         </div>
                     </div>
                 </div>
 
-                <!-- Helper Toolbar -->
-                <div class="axes-toolbar">
+                <!-- TABS -->
+                <div style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 2px solid rgba(212, 175, 55, 0.2); padding-bottom: 10px;">
+                    <button class="btn" id="tab-btn-video" onclick="window.switchEditorTab('video')" style="background: var(--text-primary, #333); color: var(--bg-primary, #fff); border: 1px solid var(--text-primary, #333); font-weight: bold; font-size: 1.05rem;">🎥 تحرير التفريغ (Karaoké)</button>
+                    <button class="btn" id="tab-btn-reading" onclick="window.switchEditorTab('reading')" style="background: transparent; color: var(--text-primary, #333); border: 1px solid var(--text-primary, #333); font-weight: bold; font-size: 1.05rem;">📖 تحرير وضع القراءة (Lecture)</button>
+                </div>
+
+                <!-- Helper Toolbar (Video mode only) -->
+                <div id="axes-video-toolbar" class="axes-toolbar">
                     <span class="axes-toolbar-title">🛠️ أدوات تحديد ونقل نص التفريغ:</span>
+                    <button class="axes-toolbar-btn" onclick="window.resyncFullscreenAxis()" title="استخراج النص تلقائياً بناءً على الكرونو" style="background:var(--primary); color:white; border-color:var(--primary);">🪄 جلب النص السحري</button>
                     <button class="axes-toolbar-btn" onclick="window.moveSelectionToPrev()" title="نقل النص المحدد إلى نهاية المحور السابق">➡️ السابق</button>
                     <button class="axes-toolbar-btn" onclick="window.moveSelectionToNext()" title="نقل النص المحدد إلى بداية المحور التالي">⬅️ التالي</button>
                     <button class="axes-toolbar-btn" onclick="window.splitAxisAtSelection()" title="تقسيم المحور عند تحديد النص أو موقع المؤشر">✂️ تقسيم المحور</button>
@@ -11784,10 +11945,24 @@ window.addEventListener('unhandledrejection', function(e) {
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; flex: 1; min-height: 400px; margin-bottom: 20px;">
-                    <!-- Left: Transcription Text -->
-                    <div class="editor-card" style="flex: 1; display: flex; flex-direction: column; border-color: var(--primary);">
-                        <div class="editor-card-title" style="color: var(--primary);">📝 نص التفريغ</div>
-                        <textarea id="axis-transcription-editor" class="axes-textarea" style="flex: 1; min-height: 250px;" placeholder="اكتب نص التفريغ الحرفي الكامل هنا..." oninput="currentAxesEditing.blocks[activeAxisIdx].search_text = this.value; window.updateLiveStudentPreview();">${escapeHtml(block.search_text || '')}</textarea>
+                    
+                    <!-- Left Column: Switches between Video and Reading -->
+                    <div style="display: flex; flex-direction: column; flex: 1;">
+                        
+                        <!-- TAB CONTENT: VIDEO -->
+                        <div id="editor-tab-video" class="editor-card" style="flex: 1; display: flex; flex-direction: column; border-color: var(--primary); margin-bottom: 0;">
+                            <div class="editor-card-title" style="color: var(--primary);">🎥 التفريغ الحرفي للفيديو</div>
+                            <textarea id="axis-transcription-editor" class="axes-textarea" style="flex: 1; min-height: 250px;" placeholder="اكتب نص التفريغ الحرفي الكامل هنا..." oninput="currentAxesEditing.blocks[activeAxisIdx].search_text = this.value; currentAxesEditing.blocks[activeAxisIdx]._isModified = true; window.updateLiveStudentPreview();">${escapeHtml(block.search_text || '')}</textarea>
+                        </div>
+
+                        <!-- TAB CONTENT: READING -->
+                        <div id="editor-tab-reading" class="editor-card" style="flex: 1; display: none; flex-direction: column; border-color: #10b981; margin-bottom: 0;">
+                            <div class="editor-card-title" style="color: #10b981; display: flex; justify-content: space-between; align-items: center; padding-right: 4px;">
+                            <span>📖 محتوى وضع القراءة</span>
+                            <button onclick="window.copyTranscriptionToReading()" style="background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; color: #047857; border-radius: 6px; padding: 2px 8px; font-size: 0.8rem; cursor: pointer; white-space: nowrap;">استنساخ التفريغ 👇</button>
+                            </div>
+                            <textarea id="axis-reading-editor" class="axes-textarea" style="flex: 1; min-height: 250px;" placeholder="اكتب النص المنظم والمنسق لوضع القراءة هنا... (إذا تركته فارغاً سيتم استخدام التفريغ الحرفي)" oninput="currentAxesEditing.blocks[activeAxisIdx].reading_text = this.value; currentAxesEditing.blocks[activeAxisIdx]._isModified = true; window.updateLiveStudentPreview();">${escapeHtml(block.reading_text || '')}</textarea>
+                        </div>
                     </div>
 
                     <!-- Right: Explanation + Poetry stacked -->
@@ -11829,6 +12004,8 @@ window.addEventListener('unhandledrejection', function(e) {
             if (!currentAxesEditing) return;
             const newAx = {
                 title: 'محور جديد',
+                is_sub_theme: false,
+                reading_text: '',
                 explanation: '',
                 poetry_verses: '',
                 search_text: '',
@@ -11874,6 +12051,30 @@ window.addEventListener('unhandledrejection', function(e) {
         };
 
         
+
+        window.resyncFullscreenAxis = function() {
+            if (!currentAxesEditing) return;
+            const block = currentAxesEditing.blocks[activeAxisIdx];
+            const startSec = block.start_seconds || 0;
+            
+            const sortedBlocks = [...currentAxesEditing.blocks].sort((a, b) => (a.start_seconds || 0) - (b.start_seconds || 0));
+            const sortedIdx = sortedBlocks.findIndex(b => b === block);
+            const endSec = sortedIdx + 1 < sortedBlocks.length ? (sortedBlocks[sortedIdx + 1].start_seconds || Infinity) : Infinity;
+            
+            const lesson = state.transcripts.find(l => l.subject === currentAxesEditing.subject && parseInt(l.lessonNum) === parseInt(currentAxesEditing.lessonNum));
+            if (!lesson || !lesson.segments) return;
+
+            const blockSegs = lesson.segments.filter(seg => (seg.sec || 0) >= startSec && (seg.sec || 0) < endSec);
+            const newText = blockSegs.map(s => s.text).join('\n');
+            
+            block.search_text = newText;
+            block._isModified = true;
+            const txtArea = document.getElementById('axis-transcription-editor');
+            if (txtArea) txtArea.value = newText;
+            
+            window.updateLiveStudentPreview();
+            showToast("🪄 تم جلب النص السحري بنجاح!", "success");
+        };
 
         window.moveSelectionToPrev = function() {
             const txtArea = document.getElementById('axis-transcription-editor');
@@ -11955,6 +12156,8 @@ window.addEventListener('unhandledrejection', function(e) {
 
             const newAx = {
                 title: `${currentAxesEditing.blocks[activeAxisIdx].title || 'المحور'} (تابع)`,
+                is_sub_theme: false,
+                reading_text: '',
                 explanation: '',
                 poetry_verses: '',
                 search_text: splitText,
@@ -12029,18 +12232,68 @@ window.addEventListener('unhandledrejection', function(e) {
                 saveBtn.innerHTML = '⏳ جاري الحفظ ومزامنة البيانات...';
             }
 
+            currentAxesEditing.blocks.sort((a, b) => (a.start_seconds || 0) - (b.start_seconds || 0));
+
+            const lesson = state.transcripts.find(l => l.subject === currentAxesEditing.subject && parseInt(l.lessonNum) === parseInt(currentAxesEditing.lessonNum));
+            
+            let finalSegments = lesson ? JSON.parse(JSON.stringify(lesson.segments || [])) : [];
+            let segmentsChanged = false;
+
+            if (lesson) {
+                currentAxesEditing.blocks.forEach((block, bIdx) => {
+                    if (block._isModified) {
+                        segmentsChanged = true;
+                        const firstSec = block.start_seconds || 0;
+                        const nextBlock = currentAxesEditing.blocks[bIdx + 1];
+                        const lastSec = nextBlock ? (nextBlock.start_seconds || Infinity) : Infinity;
+
+                        // 1. EXTRACT original segments BEFORE deleting them
+                        const originalSegments = finalSegments.filter(s => s.sec >= firstSec && s.sec < lastSec);
+
+                        // 2. Remove ALL existing segments in this block's time window
+                        finalSegments = finalSegments.filter(s => s.sec < firstSec || s.sec >= lastSec);
+
+                        // 3. Prepare the new sentences
+                        let sentences = [];
+                        const lines = (block.search_text || '').split('\n');
+                        lines.forEach(line => {
+                            if (line.trim().length > 0) {
+                                sentences.push(...smartSplitSentences(line));
+                            }
+                        });
+                        
+                        // 4. Align text using intelligent fuzzy matching
+                        const alignedSegments = smartAlignSentences(sentences, originalSegments, firstSec, lastSec, 4);
+
+                        // 5. Append aligned segments back into final array
+                        alignedSegments.forEach((seg) => {
+                            finalSegments.push({
+                                ts: secToTs(seg.sec),
+                                sec: seg.sec,
+                                text: seg.text,
+                                video_link: block.video_link ? rebuildVideoLink(block.video_link, seg.sec) : ''
+                            });
+                        });
+                    }
+                });
+
+                if (segmentsChanged) {
+                    finalSegments = finalSegments.filter(s => (s.text || '').trim() !== '').sort((a, b) => a.sec - b.sec);
+                }
+            }
+
             try {
-                const payload = {
-                    userId: state.userId,
-                    subject: currentAxesEditing.subject,
-                    lessonNum: currentAxesEditing.lessonNum,
-                    thematicBlocks: currentAxesEditing.blocks
-                };
-                console.log('[SAVE] Sending payload to /admin/save-thematic-blocks...');
-                const res = await fetch('/admin/save-thematic-blocks', {
+                console.log('[SAVE] Sending payload to /admin/save-full-transcript...');
+                const res = await fetch('/admin/save-full-transcript', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        userId: state.userId,
+                        subject: currentAxesEditing.subject,
+                        lessonNum: currentAxesEditing.lessonNum,
+                        segments: finalSegments,
+                        thematicBlocks: currentAxesEditing.blocks
+                    })
                 });
 
                 const data = await res.json();
@@ -12125,6 +12378,8 @@ window.addEventListener('unhandledrejection', function(e) {
             
             const newAx = {
                 title: 'محور جديد',
+                is_sub_theme: false,
+                reading_text: '',
                 explanation: '',
                 video_link: '',
                 poetry_verses: '',
@@ -12139,6 +12394,45 @@ window.addEventListener('unhandledrejection', function(e) {
             showToast("➕ تم إنشاء محور جديد بالنص المحدد", "success");
         };
 
+        window.switchEditorTab = function(tabName) {
+            const btnVideo = document.getElementById('tab-btn-video');
+            const btnReading = document.getElementById('tab-btn-reading');
+            const tabVideo = document.getElementById('editor-tab-video');
+            const tabReading = document.getElementById('editor-tab-reading');
+            const toolbar = document.getElementById('axes-video-toolbar');
+            
+            if (!btnVideo || !btnReading) return;
+            
+            if (tabName === 'video') {
+                btnVideo.style.background = 'var(--text-primary, #333)';
+                btnVideo.style.color = 'var(--bg-primary, #fff)';
+                btnReading.style.background = 'transparent';
+                btnReading.style.color = 'var(--text-primary, #333)';
+                tabVideo.style.display = 'flex';
+                tabReading.style.display = 'none';
+                toolbar.style.display = 'flex';
+            } else {
+                btnReading.style.background = 'var(--text-primary, #333)';
+                btnReading.style.color = 'var(--bg-primary, #fff)';
+                btnVideo.style.background = 'transparent';
+                btnVideo.style.color = 'var(--text-primary, #333)';
+                tabReading.style.display = 'flex';
+                tabVideo.style.display = 'none';
+                toolbar.style.display = 'none';
+            }
+        };
+
+        window.copyTranscriptionToReading = function() {
+            if (!currentAxesEditing) return;
+            const block = currentAxesEditing.blocks[activeAxisIdx];
+            if (block.reading_text && block.reading_text.trim() !== '' && !confirm("⚠️ وضع القراءة يحتوي على نص بالفعل، هل تريد استبداله بنص التفريغ؟")) return;
+            block.reading_text = block.search_text;
+            block._isModified = true;
+            document.getElementById('axis-reading-editor').value = block.search_text || '';
+            window.updateLiveStudentPreview();
+            showToast("✅ تم استنساخ نص التفريغ إلى وضع القراءة", "success");
+        };
+
         window.updateLiveStudentPreview = function() {
             const container = document.getElementById('live-student-preview-container');
             if (!container || !currentAxesEditing) return;
@@ -12147,7 +12441,8 @@ window.addEventListener('unhandledrejection', function(e) {
 
             const escapedTitle = escapeHtml(block.title || 'عنوان المحور');
             const escapedExpl = escapeHtml(block.explanation || 'لا يوجد شرح لهذا المحور حتى الآن. اكتب شرحاً في الأعلى للمعاينة...');
-            const escapedSearchText = escapeHtml(block.search_text || 'لا يوجد نص تفريغ لهذا المحور...');
+            const actualReadingText = (block.reading_text && block.reading_text.trim() !== '') ? block.reading_text : block.search_text;
+            const escapedSearchText = escapeHtml(actualReadingText || 'لا يوجد نص تفريغ لهذا المحور...');
             
             // Auto-extract poetry
             let extractedPoetry = "";

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Académie - Liseuse Interactive</title>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;600;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reader.css?v=poetry-20260609171132">
+    <link rel="stylesheet" href="reader.css?v=poetry-new3">
     <!-- Immediate settings application to prevent FOUC -->
     <script>
         (function() {
@@ -18,6 +18,12 @@
     <!-- YouTube API -->
     <script src="https://www.youtube.com/iframe_api"></script>
 </head>
+
+    <!-- Vertical Scroll Progress Bar -->
+    <div id="vertical-scroll-progress-container" style="position: fixed; top: 0; right: 0; width: 4px; height: 100vh; background: transparent; z-index: 9999; pointer-events: none; display: none;">
+        <div id="vertical-scroll-progress-fill" style="width: 100%; height: 0%; background: var(--primary); transition: height 0.1s ease-out;"></div>
+    </div>
+
 <body>
 
     <!-- TAB: HOME -->
@@ -90,13 +96,7 @@
                 </div>
             </div>
 
-            <!-- View Toggle -->
-            <div style="display:flex; justify-content:center; margin-bottom:20px;">
-                <div style="background:var(--surface); border:1px solid var(--border-color); border-radius:12px; display:flex; overflow:hidden;">
-                    <button id="toggle-grid-btn" onclick="setSyllabusMode('grid')" style="flex:1; padding:10px 20px; border:none; background:var(--primary); color:white; font-weight:bold; cursor:pointer;">الشبكة</button>
-                    <button id="toggle-list-btn" onclick="setSyllabusMode('list')" style="flex:1; padding:10px 20px; border:none; background:transparent; color:var(--text-2); font-weight:bold; cursor:pointer;">البرنامج</button>
-                </div>
-            </div>
+
 
             <div id="subjects-list" class="subjects-accordion">
                 <!-- Subjects and lessons injected here -->
@@ -122,14 +122,17 @@
             <div id="sticky-header-container" style="position: sticky; top: 0; z-index: 102; background: var(--bg); box-shadow: 0 4px 15px rgba(0,0,0,0.08); transition: transform 0.3s ease;">
                 <!-- Top Navigation Bar for Reader only -->
                 <header class="top-nav" style="border-bottom: none; padding-bottom: 8px;">
-                    <button class="control-btn" style="font-weight:bold; background: var(--surface);" onclick="openMindMap()">
-                        خريطة
-                    </button>
+                    <button class="control-btn font-control-btn" title="خريطة المنهج" onclick="openMindMap()">🗺️</button>
                     <div class="reader-controls">
                         <button class="control-btn font-control-btn" id="btn-text-minus">ض-</button>
                         <button class="control-btn font-control-btn" id="btn-text-plus">ض+</button>
                         <button class="control-btn" id="btn-theme-toggle">🌙</button>
-                            <button class="control-btn" id="btn-zen-toggle" title="Mode Zen" style="margin-right:4px;">👁️</button>
+                            
+<div class="segmented-control" style="display: flex; background: var(--surface-2, rgba(0,0,0,0.1)); border-radius: 8px; padding: 2px; border: 1px solid var(--border-color); margin-right: 4px;">
+    <button class="control-btn segment-btn" id="btn-seg-video" style="border-radius: 6px; padding: 2px 10px; font-size: 0.85rem; font-weight: bold; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">🎥 فيديو</button>
+    <button class="control-btn segment-btn active" id="btn-seg-reading" style="border-radius: 6px; padding: 2px 10px; font-size: 0.85rem; font-weight: bold; border: none; background: var(--primary); color: white; cursor: pointer; transition: all 0.2s;">📖 قراءة</button>
+</div>
+
                         <button class="control-btn" id="btn-settings-toggle" title="Paramètres de Lecture">⚙️</button>
                     </div>
                 </header>
@@ -332,7 +335,7 @@
         </button>
     </nav>
 
-    <script src="reader.js?v=sepia-16"></script>
+    <script src="reader.js?v=sepia-22"></script>
 
 </body>
 </html>

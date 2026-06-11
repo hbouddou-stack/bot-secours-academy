@@ -1377,13 +1377,14 @@
             <div class="axes-editor-header">
                 <h2>📝 لوحة التحكم وإدارة محاور الدرس الشاملة (100% Plein Écran)</h2>
                 <div style="display: flex; gap: 10px; align-items: center;">
+                    <button class="btn btn-secondary btn-sm" id="btn-toggle-sidebar" onclick="window.toggleAxesSidebar()" style="font-weight: bold;" title="إخفاء أو إظهار قائمة المحاور الجانبية لتوسيع مساحة العمل">☰ قائمة المحاور</button>
                     <button class="btn btn-secondary btn-sm" style="background: rgba(212, 175, 55, 0.15); color: var(--gold); border-color: var(--gold); font-weight: bold;" onclick="window.toggleFullTranscriptPanel()">📖 عرض التفريغ الكامل للدرس</button>
                     <button class="btn btn-secondary btn-sm" onclick="window.closeAxesEditor()">✖ إغلاق اللوحة</button>
                 </div>
             </div>
             <div class="axes-editor-content">
                 <!-- Sidebar -->
-                <div class="axes-sidebar">
+                <div class="axes-sidebar" id="axes-sidebar-container" style="transition: all 0.3s ease;">
                     <div class="axes-list" id="axes-sidebar-list">
                         <!-- Loaded dynamically -->
                     </div>
