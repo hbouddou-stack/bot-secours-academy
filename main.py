@@ -3753,6 +3753,7 @@ async def start_web_server(bot: Bot):
     app['bot'] = bot
     
     app.router.add_get('/', handle_index)
+    app.router.add_get('/index.html', handle_index)
     app.router.add_get('/interactive.html', handle_interactive)
     app.router.add_get('/admin_mindmap.html', handle_admin_mindmap)
     
