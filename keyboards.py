@@ -798,11 +798,11 @@ def get_report_error_options_keyboard(question_id: int, source: str = "quiz") ->
 def get_webapp_base_url() -> str:
     url = os.getenv("WEBAPP_URL")
     if url and url.strip():
-        return url.strip()
+        return url.strip().rstrip('/')
     
     railway_url = os.getenv("RAILWAY_STATIC_URL")
     if railway_url and railway_url.strip():
-        r_url = railway_url.strip()
+        r_url = railway_url.strip().rstrip('/')
         if not r_url.startswith("http"):
             return f"https://{r_url}"
         return r_url
